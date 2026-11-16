@@ -1,0 +1,64 @@
+# ============================================================
+# 大数据课程设计：代码走 GitHub，大体量数据（>50MB）走百度网盘
+# ============================================================
+
+# 1. 本地原始数据、小样本包与持久化数据库目录（严禁 git add 上传）
+data/*
+!data/.gitkeep
+weaviate_data/
+mongo_data/
+**/weaviate_data/
+**/mongo_data/
+hive_metastore_db/
+metastore_db/
+spark-warehouse/
+derby.log
+
+# 2. 大体量数据文件与模型权重
+*.parquet
+*.orc
+*.avro
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+*.mp4
+*.mov
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# 3. 屏蔽常规 CSV，但放行全组契约规定的轻量统计交接 CSV
+*.csv
+!01_cluster_hive/genre_tag_wc.csv
+!02_spark_als/genre_stats.csv
+!02_spark_als/region_stats.csv
+!analysis/01_data/*.csv
+!analysis/02_spark/*.csv
+!analysis/03_eval/*.csv
+
+# 4. Python / Jupyter / IDE / OS 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+._*
+*.log
+
+# 5. 环境变量与密钥（切勿提交大模型 API Key）
+.env
+.env.*
+!.env.example
