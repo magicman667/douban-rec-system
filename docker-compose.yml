@@ -1,0 +1,104 @@
+x-platform: &platform
+  image: douban-platform:3.3.6
+  build: ./01_cluster_hive
+  group_add: ["${DOUBAN_DATA_GID:-1004}"]
+  init: true
+  restart: unless-stopped
+
+services:
+  master:
+    <<: *platform
+    hostname: master
+    command: [master]
+    mem_limit: 4g
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/namenode
+        target: /state
+        bind: {create_host_path: false}
+      - "${DOUBAN_DATA_ROOT:-/srv/douban-data}:/handoff"
+      - .:/project:ro
+    healthcheck:
+      test: [CMD-SHELL, "hdfs dfsadmin -safemode get | grep -q OFF"]
+      interval: 15s
+      timeout: 12s
+      retries: 20
+  worker1:
+    <<: *platform
+    hostname: worker1
+    command: [worker]
+    depends_on: [master]
+    mem_limit: 6g
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/worker1
+        target: /state
+        bind: {create_host_path: false}
+  worker2:
+    <<: *platform
+    hostname: worker2
+    command: [worker]
+    depends_on: [master]
+    mem_limit: 6g
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/worker2
+        target: /state
+        bind: {create_host_path: false}
+  metastore:
+    <<: *platform
+    hostname: metastore
+    command: [metastore]
+    environment:
+      DOUBAN_ROLE: metastore
+    depends_on:
+      master: {condition: service_healthy}
+    mem_limit: 2g
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/metastore
+        target: /state
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'echo >/dev/tcp/127.0.0.1/9083'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+  hive:
+    <<: *platform
+    command: [hive]
+    depends_on:
+      metastore: {condition: service_healthy}
+    ports: ["127.0.0.1:10000:10000"]
+    volumes: [".:/project:ro"]
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'echo >/dev/tcp/127.0.0.1/10000'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    mem_limit: 2g
+  mongo:
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    restart: unless-stopped
+    ports: ["127.0.0.1:27017:27017"]
+    mem_limit: 1536m
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/mongo
+        target: /data/db
+        bind: {create_host_path: false}
+  weaviate:
+    image: ${WEAVIATE_IMAGE:-cr.weaviate.io/semitechnologies/weaviate:1.32.4}
+    restart: unless-stopped
+    mem_limit: 3g
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      DEFAULT_VECTORIZER_MODULE: none
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+      CLUSTER_HOSTNAME: weaviate
+      QUERY_DEFAULTS_LIMIT: "25"
+    volumes:
+      - type: bind
+        source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/weaviate
+        target: /var/lib/weaviate
+        bind: {create_host_path: false}
