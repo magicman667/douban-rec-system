@@ -2,6 +2,7 @@
 set -euo pipefail
 out=$(cd "$(dirname "$0")" && pwd)
 r="$out/client-runtime"
+cd "$HOME"
 export JAVA_HOME="$r/java/jre"
 export HADOOP_CONF_DIR=
 export SPARK_LOCAL_IP=127.0.0.1
