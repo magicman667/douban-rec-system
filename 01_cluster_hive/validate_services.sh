@@ -8,7 +8,9 @@ out="$root/outputs/full-v1"
 data="$root/processed/full-v1"
 mkdir -p "$out"
 deps="$out/python-deps"
-python3 -m pip install --disable-pip-version-check --target "$deps" 'pymongo>=4.10,<5'
+if ! PYTHONPATH="$deps" python3 -c 'import pymongo' 2>/dev/null; then
+    python3 -m pip install --disable-pip-version-check --target "$deps" 'pymongo>=4.10,<5'
+fi
 PYTHONPATH="$deps" python3 01_cluster_hive/mongo_store.py "$data/movie_reviews.jsonl" > "$out/mongo_import.txt"
 run="alert-$(date +%s)"
 mkdir "$out/$run"
@@ -26,8 +28,8 @@ PY
 docker compose exec -T -e PYTHONPATH=/handoff/outputs/full-v1/python-deps \
     -e DOUBAN_MONGO_URI=mongodb://mongo:27017 master \
     spark-submit --master 'local[2]' --conf spark.sql.shuffle.partitions=4 \
-    /project/01_cluster_hive/stream_alert.py "/handoff/outputs/full-v1/$run/events" \
-    "/handoff/outputs/full-v1/$run/checkpoint" --once > "$out/$run/stream.log" 2>&1
+    /project/01_cluster_hive/stream_alert.py "file:///handoff/outputs/full-v1/$run/events" \
+    "file:///handoff/outputs/full-v1/$run/checkpoint" --once > "$out/$run/stream.log" 2>&1
 PYTHONPATH="$deps:01_cluster_hive" python3 - "$movie_id" "$emitted" "$out/$run/stream.log" <<'PY' > "$out/$run/verification.txt"
 import sys
 from pathlib import Path
