@@ -23,6 +23,11 @@ files = {
         "yarn.scheduler.maximum-allocation-mb": "4096", "yarn.nodemanager.vmem-check-enabled": "false",
         "yarn.nodemanager.env-whitelist": "JAVA_HOME,HADOOP_HOME,HADOOP_CONF_DIR,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_MAPRED_HOME,HADOOP_YARN_HOME,PATH,LANG,LC_ALL,PYTHONHASHSEED",
     },
+    "capacity-scheduler": {
+        "yarn.scheduler.capacity.root.queues": "default",
+        "yarn.scheduler.capacity.root.default.capacity": "100",
+        "yarn.scheduler.capacity.root.default.maximum-capacity": "100",
+    },
     "hive-site": {
         "javax.jdo.option.ConnectionURL": "jdbc:derby:;databaseName=/state/metastore_db;create=true",
         "hive.metastore.warehouse.dir": "/warehouse",
