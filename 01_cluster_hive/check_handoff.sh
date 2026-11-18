@@ -9,7 +9,7 @@ export SPARK_LOCAL_HOSTNAME=localhost
 export SPARK_LOCAL_DIRS="$(mktemp -d)"
 trap 'rm -rf -- "$SPARK_LOCAL_DIRS"' EXIT
 query='SELECT COUNT(*) FROM douban_db.movies; SELECT COUNT(*) FROM douban_db.train_ratings; SELECT COUNT(*) FROM douban_db.test_ratings;'
-counts=$("$JAVA_HOME/bin/java" -cp "$r/hive-jdbc-3.1.3-standalone.jar" org.apache.hive.beeline.BeeLine   -u jdbc:hive2://127.0.0.1:10000/default -n "$(id -un)" --silent=true --showHeader=false --outputformat=tsv2   -e "$query" </dev/null)
+counts=$("$JAVA_HOME/bin/java" -cp "$r/hive-jdbc-3.1.3-standalone.jar:$r/hive-lib/*:$r/spark/jars/*" org.apache.hive.beeline.BeeLine   -u jdbc:hive2://127.0.0.1:10000/default -n "$(id -un)" --silent=true --showHeader=false --outputformat=tsv2   -e "$query" </dev/null)
 python3 - "$out/counts.json" "$counts" <<'PY'
 import json,sys
 from pathlib import Path
