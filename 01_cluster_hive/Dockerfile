@@ -5,12 +5,15 @@ COPY --from=hadoop /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.212.b04-0.el7_6.x86_64 
 ENV JAVA_HOME=/opt/java/jre
 RUN sed -i 's@http://archive.ubuntu.com/ubuntu/@http://repo.huaweicloud.com/ubuntu/@g; s@http://security.ubuntu.com/ubuntu/@http://repo.huaweicloud.com/ubuntu/@g' /etc/apt/sources.list.d/ubuntu.sources;     apt-get -o Acquire::Retries=3 update;     apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates curl python3 procps;     rm -rf /var/lib/apt/lists/*
 ARG SPARK_VERSION=3.5.8
+ARG APACHE_BINARY_MIRROR=https://repo.huaweicloud.com/apache
 RUN set -eu; for tool in curl python3; do command -v "$tool" || exit 1; done; \
     for artifact in \
       "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
       "https://archive.apache.org/dist/hive/hive-3.1.3/apache-hive-3.1.3-bin.tar.gz"; do \
       name="${artifact##*/}"; \
-      curl -fLSs --retry 4 "$artifact" -o "/tmp/$name"; \
+      path="${artifact#https://archive.apache.org/dist/}"; \
+      curl -fLSs --retry 3 --connect-timeout 10 --speed-limit 10240 --speed-time 45 "$APACHE_BINARY_MIRROR/$path" -o "/tmp/$name" || \
+        curl -fLSs --retry 3 --connect-timeout 10 --speed-limit 10240 --speed-time 45 "$artifact" -o "/tmp/$name"; \
       case "$name" in spark*) checksum=sha512; width=128;; *) checksum=sha256; width=64;; esac; \
       curl -fLSs --retry 4 "$artifact.$checksum" -o "/tmp/$name.$checksum"; \
       expected="$(grep -Eo "[a-fA-F0-9]{$width}" "/tmp/$name.$checksum" | head -1 | tr 'A-F' 'a-f')"; \
