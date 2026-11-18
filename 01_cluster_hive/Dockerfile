@@ -25,6 +25,8 @@ RUN set -eu; for tool in curl python3; do command -v "$tool" || exit 1; done; \
     groupadd -g 17001 platform; useradd -m -u 17001 -g platform platform; \
     mkdir -p /state; chown platform:platform /state
 ENV PATH="/opt/java/jre/bin:/opt/hadoop/bin:/opt/spark/bin:/opt/hive/bin:$PATH" HADOOP_HOME=/opt/hadoop HIVE_HOME=/opt/hive SPARK_HOME=/opt/spark HADOOP_CONF_DIR=/tmp/douban-config HIVE_CONF_DIR=/tmp/douban-config
+COPY --from=hadoop /usr/share/javazi-1.8/tzdb.dat /usr/share/javazi-1.8/tzdb.dat
+COPY --from=hadoop /etc/pki/ca-trust/extracted/java/cacerts /etc/pki/ca-trust/extracted/java/cacerts
 ENV HADOOP_LOG_DIR=/tmp/douban-logs YARN_LOG_DIR=/tmp/douban-logs
 COPY start.sh /usr/local/bin/douban-start
 USER platform
