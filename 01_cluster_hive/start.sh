@@ -8,7 +8,11 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 files = {
-    "core-site": {"fs.defaultFS": "hdfs://master:8020"},
+    "core-site": {
+        "fs.defaultFS": "hdfs://master:8020",
+        "hadoop.proxyuser.platform.hosts": "hive",
+        "hadoop.proxyuser.platform.users": "platform",
+    },
     "hdfs-site": {
         "dfs.replication": "2", "dfs.namenode.name.dir": "file:///state/name",
         "dfs.datanode.data.dir": "file:///state/data", "dfs.namenode.datanode.registration.ip-hostname-check": "false",
