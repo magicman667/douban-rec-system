@@ -15,3 +15,7 @@
 5. 2 号验收通过后开始全量特征和 ALS。MongoDB 默认地址在 ECS 上是 mongodb://127.0.0.1:27017，在容器网内用 mongodb://mongo:27017。Weaviate 由后续模块通过内部服务名 weaviate 访问。
 
 电影、评分和评论 CSV 保持原始文件名；电影和评分读取 UTF-8，短评读取 GB18030。相同用户同一时间的评分使用 rating_id 排序。单条历史评分留在训练集。数据字典直接见 tables.sql，用户映射位于 processed/full-v1/user_mapping.csv。
+
+## 成员账号验收
+
+在 ECS 的成员终端中执行 bash /srv/douban-data/outputs/full-v1/check_handoff.sh。脚本通过本机 HiveServer2 核对三张表的行数，并用 Spark 聚合从这批 Hive 存储位置导出的全量训练 Parquet。共享交接目录包含 parquet/、counts.json 和客户端运行时。执行验收前，先确认该目录的 Parquet 三个子目录均已发布。
