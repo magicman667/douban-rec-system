@@ -102,3 +102,7 @@ services:
         source: ${DOUBAN_DATA_ROOT:-/srv/douban-data}/volumes/weaviate
         target: /var/lib/weaviate
         bind: {create_host_path: false}
+
+networks:
+  default:
+    name: douban-platform-network
