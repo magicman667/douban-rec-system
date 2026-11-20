@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Callable
 
@@ -17,6 +18,7 @@ class WeaviateRepository:
         self.user_vectors = user_vectors
         self.encoder = encoder
         self._semantic_cache: dict[tuple[str, int], list[tuple[Movie, float]]] = {}
+        self._semantic_cache_lock = threading.Lock()
 
     @staticmethod
     def _movie(obj) -> Movie:
@@ -46,12 +48,15 @@ class WeaviateRepository:
 
     def semantic_candidates(self, query_text: str, limit: int):
         key = (query_text, limit)
-        if key in self._semantic_cache:
-            return self._semantic_cache[key]
+        with self._semantic_cache_lock:
+            cached = self._semantic_cache.get(key)
+        if cached is not None:
+            return cached
         rows = self._near(self.encoder(query_text), "semantic", limit)
-        if len(self._semantic_cache) >= 512:
-            self._semantic_cache.pop(next(iter(self._semantic_cache)))
-        self._semantic_cache[key] = rows
+        with self._semantic_cache_lock:
+            if len(self._semantic_cache) >= 512:
+                self._semantic_cache.pop(next(iter(self._semantic_cache)))
+            self._semantic_cache[key] = rows
         return rows
 
     def semantic_for_user(self, user_id: int, limit: int):
