@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.request
 from pathlib import Path
 from typing import Protocol
 
@@ -78,6 +79,36 @@ def _fallback_summary(pos: list[str], neg: list[str]) -> str:
     return f"正方主要观点：{positive}；反方主要观点：{negative}。"
 
 
+def _generate_ai_summary(title: str, pos: list[str], neg: list[str]) -> str:
+    api_key = os.getenv("LLM_API_KEY", "").strip()
+    base_url = os.getenv("LLM_BASE_URL", "").strip().rstrip("/")
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
+    if not api_key or not base_url or (not pos and not neg):
+        return _fallback_summary(pos, neg)
+    prompt = (
+        f"请根据电影《{title}》的豆瓣五星好评与一星差评，用不超过120字提炼正反方核心交锋点并给出观影排雷建议。\n"
+        f"五星好评：{' | '.join(pos[:3])}\n一星差评：{' | '.join(neg[:3])}"
+    )
+    payload = json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 220,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base_url}/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            content = str(data["choices"][0]["message"]["content"]).strip()
+            return content or _fallback_summary(pos, neg)
+    except Exception:
+        return _fallback_summary(pos, neg)
+
+
 def get_controversy_detail_and_twins(movie_id: int) -> dict:
     repo = _repo()
     movie = repo.get_movie(int(movie_id))
@@ -88,7 +119,7 @@ def get_controversy_detail_and_twins(movie_id: int) -> dict:
     neg = list(review_doc.get("neg_comments") or [])
     summary = str(review_doc.get("ai_summary") or "").strip()
     if not summary:
-        summary = _fallback_summary(pos, neg)
+        summary = _generate_ai_summary(movie.title, pos, neg)
         if _reviews:
             _reviews.save_summary(movie.movie_id, summary)
     twins = _repo().low_risk_twins(movie, 3)

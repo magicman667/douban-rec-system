@@ -4,7 +4,6 @@ import argparse
 import math
 from pathlib import Path
 
-from pyspark.ml.recommendation import ALSModel
 from pyspark.sql import SparkSession, Window, functions as F
 
 from feature_engineering import HIGH_CONTROVERSY, write_csv
@@ -32,7 +31,40 @@ def make_cohort(train, test, profiles, max_users):
 def read_lists(spark, path):
     if path.endswith((".json", ".jsonl")):
         return spark.read.schema("user_id INT, movie_ids ARRAY<INT>").json(path)
-    return spark.read.parquet(path).select("user_id", "movie_ids")
+    df = spark.read.parquet(path)
+    if "movie_ids" in df.columns:
+        return df.select("user_id", "movie_ids")
+    return df.groupBy("user_id").agg(
+        F.transform(
+            F.array_sort(F.collect_list(F.struct("rank", "movie_id"))),
+            lambda entry: entry.movie_id,
+        ).alias("movie_ids")
+    )
+
+
+def popular_candidates(cohort, films):
+    popularity = films.where(F.col("rating_count") > 0).orderBy(
+        F.desc("bayesian_rating"), F.desc("rating_count"), "movie_id"
+    )
+    batches = cohort.withColumn(
+        "history_bucket", F.ceil(F.log2(F.size("seen_ids") + 1)).cast("int")
+    ).persist()
+    b1 = []
+    try:
+        for row in batches.select("history_bucket").distinct().collect():
+            bucket = row.history_bucket
+            k = TOP_K + 2 ** bucket - 1
+            users = batches.where(F.col("history_bucket") == bucket).select("user_id")
+            popular_ids = [item.movie_id for item in popularity.select("movie_id").take(k)]
+            b1.append(users.withColumn("movie_ids", F.lit(popular_ids).cast("array<int>")))
+        if not b1:
+            raise ValueError("No eligible evaluation users.")
+        popular = b1[0]
+        for rows in b1[1:]:
+            popular = popular.unionByName(rows)
+        return popular
+    finally:
+        batches.unpersist()
 
 
 def baseline_candidates(model, cohort, films, include_popular=True):
@@ -137,6 +169,7 @@ def main():
     parser.add_argument("--hive-db", default="douban_db")
     parser.add_argument("--artifacts", required=True, help="Directory holding the group 2 Parquet and ALS outputs")
     parser.add_argument("--analysis-dir", type=Path)
+    parser.add_argument("--b2", help="Precomputed B2 ALS ordered recommendations (Parquet or JSON Lines)")
     parser.add_argument("--b3", help="Member 3 ordered recommendations (Parquet or JSON Lines)")
     parser.add_argument("--ours", help="Member 3 ordered recommendations (Parquet or JSON Lines)")
     parser.add_argument("--export-cohort", help="Write eligible user IDs to a new Parquet path and exit")
@@ -174,8 +207,13 @@ def main():
             return
         films = spark.read.parquet(f"{root}/movie_features.parquet")
         catalog_count = films.count()
-        model = ALSModel.load(f"{root}/als_model")
-        b1, b2 = baseline_candidates(model, cohort, films, include_popular=not args.als_only)
+        if args.b2:
+            b2 = read_lists(spark, args.b2)
+            b1 = None if args.als_only else popular_candidates(cohort, films)
+        else:
+            from pyspark.ml.recommendation import ALSModel
+            model = ALSModel.load(f"{root}/als_model")
+            b1, b2 = baseline_candidates(model, cohort, films, include_popular=not args.als_only)
         if args.als_only:
             rankings = [("B2", b2)]
         else:

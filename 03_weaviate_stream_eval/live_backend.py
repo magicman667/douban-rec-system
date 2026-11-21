@@ -100,7 +100,7 @@ def build_live_backend(factors_path: Path, user_profiles_path: Path):
         return validate_vector(model.encode(text, normalize_embeddings=True), 512, "BGE")
 
     host = os.getenv("WEAVIATE_HOST", "127.0.0.1")
-    client = weaviate.connect_to_custom(http_host=host, http_port=int(os.getenv("WEAVIATE_HTTP_PORT", "8080")), http_secure=False, grpc_host=host, grpc_port=int(os.getenv("WEAVIATE_GRPC_PORT", "50051")), grpc_secure=False)
+    client = weaviate.connect_to_custom(http_host=host, http_port=int(os.getenv("WEAVIATE_HTTP_PORT", "18080")), http_secure=False, grpc_host=host, grpc_port=int(os.getenv("WEAVIATE_GRPC_PORT", "50052")), grpc_secure=False)
     repository = WeaviateRepository(client, os.getenv("WEAVIATE_COLLECTION", "DoubanMovie"), profiles, user_vectors, encode)
     mongo = MongoClient(os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017"))
     review_store = MongoReviewStore(mongo[os.getenv("MONGO_DATABASE", "douban_db")][os.getenv("MONGO_COLLECTION", "movie_reviews")])

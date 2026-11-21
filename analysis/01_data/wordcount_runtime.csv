@@ -1,0 +1,7 @@
+engine,run_id,input_records,runtime_sec
+mapreduce,1,1250471,17.609
+spark,1,1250471,24.470
+mapreduce,2,1250471,18.545
+spark,2,1250471,22.864
+mapreduce,3,1250471,17.542
+spark,3,1250471,23.759
