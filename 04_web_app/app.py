@@ -213,7 +213,12 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
 .film-meta {
   font-size: 11px; color: #94a3b8;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 7px;
+  margin-bottom: 3px;
+}
+.film-cast {
+  font-size: 10.5px; color: #64748b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 6px; min-height: 14px;
 }
 .meter-row { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #94a3b8; }
 .meter-track { flex: 1; height: 4px; border-radius: 99px; background: rgba(148,163,184,0.16); overflow: hidden; }
@@ -287,7 +292,6 @@ GENRE_GRADIENTS = {
 }
 DEFAULT_GRADIENT = 'linear-gradient(145deg, #1e293b 0%, #0f172a 60%, #060913 100%)'
 
-
 DOUBAN_HOSTS = ('img1.doubanio.com', 'img2.doubanio.com', 'img9.doubanio.com', 'img3.doubanio.com')
 POSTER_HEADERS = {
     'Referer': 'https://movie.douban.com/',
@@ -347,7 +351,7 @@ def _prefetch_posters(movies):
 
 def _poster_html(movie, poster_cache=None):
     url = _safe_url(movie.get('cover_url'))
-    title = html.escape(str(movie.get('title') or ''))
+    title = html.escape(data.clean_title(movie.get('title')))
     genre = str(movie.get('main_genre') or '电影')
     year = str(movie.get('year') or '')
     sub = html.escape(' · '.join(p for p in [genre, year] if p))
@@ -360,6 +364,15 @@ def _poster_html(movie, poster_cache=None):
         f'<div class="pf-title">{title}</div>'
         f'<div class="pf-sub">{sub}</div></div>'
     )
+
+
+def _fmt_votes(votes, rating_count):
+    v = int(votes or 0)
+    if v >= 10000:
+        return f'{v / 10000:.1f}万人'
+    if v >= 1000:
+        return f'{v:,}人'
+    return f'{int(rating_count or 0):,}评'
 
 
 def _archetype_badge(movie):
@@ -390,9 +403,18 @@ def _cards(movies, context):
         c_val = float(merged.get('controversy_score', 0))
         z_val = float(merged.get('z_genre_score', 0))
         count = int(merged.get('rating_count', 0))
-        title = html.escape(str(merged.get('title') or ''))
+        votes = int(merged.get('douban_votes', 0))
+        title = html.escape(data.clean_title(merged.get('title')))
         genres_list = merged.get('genres') or ([merged.get('main_genre')] if merged.get('main_genre') else [])
-        meta_line = html.escape(' / '.join(str(g) for g in list(genres_list)[:2]) + (f' · {count:,}评' if count else ''))
+        meta_line = html.escape(' / '.join(str(g) for g in list(genres_list)[:2]) + ' · ' + _fmt_votes(votes, count))
+        directors = str(merged.get('directors') or '').strip()
+        year_txt = str(merged.get('year') or '').strip()
+        cast_parts = []
+        if year_txt and year_txt != 'None':
+            cast_parts.append(year_txt)
+        if directors:
+            cast_parts.append(f'导: {directors.split("/")[0].strip()}')
+        cast_line = html.escape(' · '.join(cast_parts) or '经典片库')
         badge_text, badge_cls = _archetype_badge(merged)
         c_pct = min(100, max(6, int(c_val * 100)))
         c_color = '#10b981' if c_val < 0.28 else ('#f59e0b' if c_val < 0.50 else '#f43f5e')
@@ -409,6 +431,7 @@ def _cards(movies, context):
                 f'<div class="film-body">'
                 f'<div class="film-title" title="{title}">{title}</div>'
                 f'<div class="film-meta">{meta_line}</div>'
+                f'<div class="film-cast">{cast_line}</div>'
                 f'<div class="meter-row">'
                 f'<span>分歧 {c_val:.2f}</span>'
                 f'<div class="meter-track"><div class="meter-fill" style="width:{c_pct}%;background:{c_color}"></div></div>'
@@ -434,6 +457,7 @@ def detail():
         return
 
     movie = {**extra, **result['movie']}
+    clean_name = data.clean_title(movie.get('title'))
     left, right = st.columns([1.0, 2.2], gap='medium')
     with left:
         st.markdown(
@@ -453,13 +477,24 @@ def detail():
         )
 
     with right:
-        st.subheader(movie['title'])
+        st.subheader(clean_name)
+        directors = str(extra.get('directors') or '').strip()
+        actors = str(extra.get('actors') or '').strip()
+        crew_bits = []
+        if directors:
+            crew_bits.append('🎬 导演：' + ' / '.join(p.strip() for p in directors.split('/')[:2]))
+        if actors:
+            crew_bits.append('🎭 主演：' + ' / '.join(p.strip() for p in actors.split('/')[:4]))
+        if crew_bits:
+            st.caption('  |  '.join(crew_bits))
+
         if result.get('stream_alert'):
             st.error('⚡ Spark Streaming 实时预警：' + (result.get('recent_drop_msg') or '近期一星差评激增'))
-        m1, m2, m3 = st.columns(3)
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric('贝叶斯口碑', f'{float(movie.get("bayesian_rating", 0)):.2f} / 5')
         m2.metric('同类相对分 Z', f'{float(movie.get("z_genre_score", 0)):+.2f}')
         m3.metric('耦合分歧 C', f'{float(movie.get("controversy_score", 0)):.3f}')
+        m4.metric('全网热度', _fmt_votes(extra.get('douban_votes', 0), extra.get('rating_count', 0)))
 
         storyline = str(extra.get('storyline') or '').strip()
         if storyline:
@@ -498,10 +533,11 @@ def detail():
     else:
         t_cols = st.columns(len(twins), gap='small')
         for idx, twin in enumerate(twins):
+            twin_name = data.clean_title(twin.get('title'))
             with t_cols[idx]:
                 st.markdown(
                     f'<div class="glass-card" style="padding:10px 12px;margin-bottom:6px">'
-                    f'<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{html.escape(str(twin["title"]))}</div>'
+                    f'<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{html.escape(twin_name)}</div>'
                     f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">★ {float(twin["bayesian_rating"]):.2f} · 分歧 {float(twin["controversy_score"]):.2f} · 相似度 {float(twin.get("similarity_score", 0)):.2f}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -526,8 +562,9 @@ def _render_alert_bar():
     a_cols = st.columns(len(active), gap='small')
     for idx, item in enumerate(active):
         short_msg = item['recent_drop_msg'].split('收到')[-1].strip() if '收到' in item['recent_drop_msg'] else '1★激增'
+        clean_name = data.clean_title(item['title'])
         with a_cols[idx]:
-            if st.button(f'⚡ 《{item["title"]}》 · {short_msg}', key=f'alert_{item["movie_id"]}', width='stretch'):
+            if st.button(f'⚡ 《{clean_name}》 · {short_msg}', key=f'alert_{item["movie_id"]}', width='stretch'):
                 st.session_state['detail_movie'] = int(item['movie_id'])
                 detail()
 
@@ -539,14 +576,17 @@ def hall():
         '<div class="tech-row">'
         '<span class="tech-pill">Weaviate 512D+50D</span>'
         '<span class="tech-pill">RRF + 非对称风险重排</span>'
-        '<span class="tech-pill">P95 44.7ms</span>'
+        '<span class="tech-pill">Filtered HNSW · P95 44.7ms</span>'
         '</div></div>',
         unsafe_allow_html=True,
     )
 
     _render_alert_bar()
 
-    personal, scene = st.tabs(['✨ 为你推荐', '🔍 一句话情境找片'])
+    genres_df = data.read_csv('genre_controversy')
+    top_genres = genres_df[genres_df['movie_count'] >= 50].sort_values('movie_count', ascending=False)['genre'].tolist()
+
+    personal, catalog, scene = st.tabs(['✨ 为你推荐', '🎬 搜电影', '🔍 一句话情境找片'])
 
     with personal:
         personas = service.personas()
@@ -559,16 +599,27 @@ def hall():
         option_uid = {label_map.get(p['user_type_label'], p['user_type_label']): int(p['user_id']) for p in personas}
         choices = [lbl for lbl in ordered_labels if lbl in option_uid] or list(option_uid.keys())
 
-        genres_df = data.read_csv('genre_controversy')
-        top_genres = genres_df[genres_df['movie_count'] >= 50].sort_values('movie_count', ascending=False)['genre'].tolist()
+        mode_specs = {
+            '🔥 经典热片': (100, 0.18, 'Filtered HNSW ≥100评'),
+            '✨ 主流口碑': (50, 0.14, 'Filtered HNSW ≥50评'),
+            '💎 全库挖宝': (0, 0.0, '全库 140,502 无过滤'),
+        }
 
-        bar1, bar2, bar3 = st.columns([2.2, 1.3, 0.85], gap='small')
+        bar1, bar2, bar3, bar4 = st.columns([1.85, 1.85, 1.15, 0.75], gap='small')
         with bar1:
             chosen = st.segmented_control('观影口味', choices, default=choices[0], label_visibility='collapsed') or choices[0]
         uid = option_uid[chosen]
         with bar2:
-            genre = st.selectbox('题材', ['全部题材'] + top_genres, label_visibility='collapsed')
+            pop_mode = st.segmented_control(
+                '选片风格',
+                list(mode_specs.keys()),
+                default='✨ 主流口碑',
+                label_visibility='collapsed',
+            ) or '✨ 主流口碑'
+        min_r, pop_w, mode_desc = mode_specs[pop_mode]
         with bar3:
+            genre = st.selectbox('题材', ['全部题材'] + top_genres, label_visibility='collapsed', key='rec_genre_select')
+        with bar4:
             with st.popover('档案 ID', width='stretch'):
                 use_custom = st.toggle('按 ID 查询', value=False)
                 custom_uid = st.number_input('用户 ID', min_value=1, value=int(uid), step=1)
@@ -577,7 +628,12 @@ def hall():
 
         try:
             with st.spinner('TDC-Rec 双通道召回与重排…'):
-                result = service.recommend(uid, None if genre == '全部题材' else genre)
+                result = service.recommend(
+                    uid,
+                    None if genre == '全部题材' else genre,
+                    min_ratings=min_r,
+                    popularity_weight=pop_w,
+                )
         except KeyError:
             st.info(f'未找到档案 #{uid}，请切换顶部预设口味。')
         except Exception:
@@ -591,13 +647,61 @@ def hall():
             k1.metric('当前画像', user_info.get('user_type_label', '均衡观影派'), f'档案 #{user_info["user_id"]}')
             k2.metric('争议容忍度 τ', f'{tau:.2f}', '自动压降高分歧' if tau < 0.28 else ('保留两极佳作' if tau > 0.50 else '口碑多样性均衡'))
             k3.metric('偏好题材', top_pref, f'历史 {int(user_info.get("rating_count", 0)):,} 部')
-            k4.metric('双向量候选池', '140,502', 'ALS 50D + BGE 512D')
+            k4.metric('检索模式', pop_mode.split()[-1], mode_desc)
 
             movies = result.get('recommendations') or []
             if not movies:
-                st.info('该题材下暂无推荐，试试切换题材。')
+                st.info('该题材下暂无推荐，试试切换题材或选片风格。')
             else:
                 _cards(movies, 'rec')
+
+    with catalog:
+        quick_queries = ['肖申克的救赎', '霸王别姬', '流浪地球', '无极', '周星驰', '宫崎骏']
+        q_cols = st.columns(len(quick_queries), gap='small')
+        for idx, q_text in enumerate(quick_queries):
+            with q_cols[idx]:
+                if st.button(f'🎬 {q_text}', key=f'cat_quick_{idx}', width='stretch'):
+                    st.session_state['catalog_query_box'] = q_text
+
+        with st.form('catalog_search_form', border=False):
+            c1, c2, c3, c4 = st.columns([2.5, 1.1, 1.05, 0.75], gap='small')
+            with c1:
+                cat_query = st.text_input(
+                    '搜电影',
+                    key='catalog_query_box',
+                    max_chars=120,
+                    placeholder='搜片名、导演、主演、国家或标签（如：周星驰、盗梦空间、恐怖）…',
+                    label_visibility='collapsed',
+                )
+            with c2:
+                cat_risk = st.selectbox('口碑筛选', ['全部', '稳妥共识', '两极争议'], label_visibility='collapsed')
+            with c3:
+                cat_genre = st.selectbox('搜电影题材', ['全部题材'] + top_genres, label_visibility='collapsed')
+            with c4:
+                st.form_submit_button('搜索', width='stretch')
+
+        active_cat_q = str(cat_query or '').strip()
+        try:
+            cat_movies = service.catalog_search(
+                query_text=active_cat_q,
+                genre=None if cat_genre == '全部题材' else cat_genre,
+                risk_filter=cat_risk,
+                min_ratings=10 if active_cat_q else 50,
+                limit=15,
+            )
+        except Exception:
+            cat_movies = []
+            st.warning('片库检索暂时繁忙，请稍后重试。')
+
+        if active_cat_q:
+            st.markdown(f'**「{html.escape(active_cat_q)}」 · 匹配 {len(cat_movies)} 部电影**')
+        else:
+            st.markdown('**🔥 全库高人气口碑榜 · Top 15**')
+
+        if cat_movies:
+            _cards(cat_movies, 'cat')
+        else:
+            st.info('未找到匹配电影，试试更换关键词、题材或放宽口碑筛选。')
 
     with scene:
         presets = ['雨天独自看的温暖科幻片', '零差评轻松喜剧', '节奏紧凑的高分悬疑', '华语高口碑剧情佳作']
@@ -627,7 +731,7 @@ def hall():
         if active_query:
             try:
                 with st.spinner('Weaviate 512 维语义检索中…'):
-                    found = service.search(active_query, avoid)
+                    found = service.search(active_query, avoid, min_ratings=50, popularity_weight=0.12)
                 st.session_state['scene_result'] = (active_query, avoid, found)
             except Exception:
                 st.session_state.pop('scene_result', None)

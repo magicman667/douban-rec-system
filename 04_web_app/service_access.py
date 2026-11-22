@@ -2,6 +2,7 @@
 import atexit
 import importlib
 import logging
+import math
 import os
 from pathlib import Path
 import sys
@@ -11,9 +12,9 @@ from pymongo import MongoClient
 import streamlit as st
 import data_access as data
 
-SOURCE = Path(os.getenv('DOUBAN_SERVICE_SOURCE', str(Path(__file__).parent / 'runtime' / 'member3')))
-if not SOURCE.is_dir():
-    SOURCE = Path(__file__).resolve().parents[1] / '03_weaviate_stream_eval'
+_REPO_M3 = Path(__file__).resolve().parents[1] / '03_weaviate_stream_eval'
+_RUNTIME_M3 = Path(__file__).parent / 'runtime' / 'member3'
+SOURCE = Path(os.getenv('DOUBAN_SERVICE_SOURCE', str(_REPO_M3 if _REPO_M3.is_dir() else _RUNTIME_M3)))
 LOCK = threading.RLock()
 
 
@@ -54,10 +55,42 @@ def call(name, **kwargs):
         raise
 
 
-def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False):
-    with_cover = [m for m in movies if str(m.get('cover_url') or '').startswith(('http://', 'https://'))]
-    without_cover = [m for m in movies if not str(m.get('cover_url') or '').startswith(('http://', 'https://'))]
-    ordered = with_cover + without_cover
+def _has_poster(movie):
+    return str(movie.get('cover_url') or '').startswith(('http://', 'https://'))
+
+
+def _attach_meta(movies):
+    meta = data.load_movie_meta()
+    enriched = []
+    for movie in movies:
+        mid = int(movie['movie_id'])
+        extra = meta.get(mid, {})
+        enriched.append({
+            **movie,
+            'douban_votes': int(movie.get('douban_votes') or extra.get('douban_votes', 0)),
+            'douban_score': float(movie.get('douban_score') or extra.get('douban_score', 0.0)),
+            'directors': str(movie.get('directors') or extra.get('directors', '')),
+            'actors': str(movie.get('actors') or extra.get('actors', '')),
+        })
+    return enriched
+
+
+def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False, popularity_weight=0.0):
+    enriched = _attach_meta(movies)
+    if popularity_weight > 0:
+        def _rank_key(m):
+            base = float(m.get('utility_score', m.get('semantic_score', 0.0)) or 0.0)
+            votes = int(m.get('douban_votes') or 0)
+            pop_boost = popularity_weight * math.log10(max(1, votes) + 1)
+            poster_boost = 0.22 if _has_poster(m) else 0.0
+            return base + pop_boost + poster_boost
+
+        ordered = sorted(enriched, key=_rank_key, reverse=True)
+    else:
+        with_cover = [m for m in enriched if _has_poster(m)]
+        without_cover = [m for m in enriched if not _has_poster(m)]
+        ordered = with_cover + without_cover
+
     if not enforce_genre_cap:
         return ordered[:top_k]
     picked, counts = [], {}
@@ -80,20 +113,60 @@ def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False):
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def recommend(uid, genre=None):
-    result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=28)
+def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14):
+    try:
+        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36, min_ratings=int(min_ratings))
+    except TypeError:
+        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36)
+    raw = result.get('recommendations') or []
+    if int(min_ratings) > 0 and len(raw) < 5:
+        try:
+            result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36, min_ratings=0)
+            raw = result.get('recommendations') or []
+        except TypeError:
+            pass
     movies = _prioritize_posters(
-        result.get('recommendations') or [],
+        raw,
         top_k=10,
         enforce_genre_cap=(genre is None),
+        popularity_weight=float(popularity_weight),
     )
     return {**result, 'recommendations': movies, 'count': len(movies)}
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def search(query, avoid=True):
-    movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=25)
-    return _prioritize_posters(movies or [], top_k=10, enforce_genre_cap=False)
+def search(query, avoid=True, min_ratings=50, popularity_weight=0.12):
+    try:
+        movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=32, min_ratings=int(min_ratings))
+    except TypeError:
+        movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=32)
+    if int(min_ratings) > 0 and len(movies or []) < 4:
+        try:
+            movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=32, min_ratings=0)
+        except TypeError:
+            pass
+    return _prioritize_posters(
+        movies or [],
+        top_k=10,
+        enforce_genre_cap=False,
+        popularity_weight=float(popularity_weight),
+    )
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def catalog_search(query_text='', genre=None, risk_filter='全部', min_ratings=20, limit=15):
+    q = str(query_text or '').strip()
+    fetch_limit = int(limit) * 2 if not q else int(limit)
+    rows = data.search_catalog(
+        query_text=q,
+        genre=genre,
+        risk_filter=risk_filter,
+        min_ratings=int(min_ratings),
+        limit=fetch_limit,
+    )
+    if not q:
+        return _prioritize_posters(rows, top_k=int(limit), enforce_genre_cap=False, popularity_weight=0.0)
+    return rows[:int(limit)]
 
 
 @st.cache_data(ttl=120, show_spinner=False)

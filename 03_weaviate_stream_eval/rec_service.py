@@ -39,14 +39,22 @@ def _repo() -> RetrievalRepository:
     return _repository
 
 
-def get_user_recommendations(user_id: int, genre_filter: str | None = None, top_k: int = 10) -> dict:
+def get_user_recommendations(user_id: int, genre_filter: str | None = None, top_k: int = 10, min_ratings: int = 0) -> dict:
     repo = _repo()
     profile = repo.get_profile(int(user_id))
     if profile is None:
         raise KeyError(f"未找到用户画像: {user_id}")
-    pool = max(100, top_k * 20)
-    als = repo.als_candidates(int(user_id), pool)
-    vector = repo.semantic_for_user(int(user_id), pool)
+    pool = max(100, top_k * 12)
+    if min_ratings > 0:
+        try:
+            als = repo.als_candidates(int(user_id), pool, min_ratings=min_ratings)
+            vector = repo.semantic_for_user(int(user_id), pool, min_ratings=min_ratings)
+        except TypeError:
+            als = repo.als_candidates(int(user_id), pool)
+            vector = repo.semantic_for_user(int(user_id), pool)
+    else:
+        als = repo.als_candidates(int(user_id), pool)
+        vector = repo.semantic_for_user(int(user_id), pool)
     ranked = fuse_rankings(als, vector, profile, top_k=top_k, genre_filter=genre_filter)
     return {
         "user": {
@@ -61,10 +69,17 @@ def get_user_recommendations(user_id: int, genre_filter: str | None = None, top_
     }
 
 
-def search_by_scene(query_text: str, avoid_controversy: bool = True, top_k: int = 10) -> list[dict]:
+def search_by_scene(query_text: str, avoid_controversy: bool = True, top_k: int = 10, min_ratings: int = 0) -> list[dict]:
     if not query_text or not query_text.strip():
         raise ValueError("query_text 不能为空")
-    rows = _repo().semantic_candidates(query_text.strip(), max(50, top_k * 10))
+    fetch_limit = max(50, top_k * 8)
+    if min_ratings > 0:
+        try:
+            rows = _repo().semantic_candidates(query_text.strip(), fetch_limit, min_ratings=min_ratings)
+        except TypeError:
+            rows = _repo().semantic_candidates(query_text.strip(), fetch_limit)
+    else:
+        rows = _repo().semantic_candidates(query_text.strip(), fetch_limit)
     if avoid_controversy:
         safe = [row for row in rows if row[0].controversy_score < 0.50]
         rows = safe if safe else rows

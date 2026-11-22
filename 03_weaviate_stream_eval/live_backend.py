@@ -17,7 +17,7 @@ class WeaviateRepository:
         self.profiles = profiles
         self.user_vectors = user_vectors
         self.encoder = encoder
-        self._semantic_cache: dict[tuple[str, int], list[tuple[Movie, float]]] = {}
+        self._semantic_cache: dict[tuple[str, int, int], list[tuple[Movie, float]]] = {}
         self._semantic_cache_lock = threading.Lock()
 
     @staticmethod
@@ -37,39 +37,64 @@ class WeaviateRepository:
     def get_profile(self, user_id: int) -> UserProfile | None:
         return self.profiles.get(int(user_id))
 
-    def _near(self, vector, target: str, limit: int):
-        from weaviate.classes.query import MetadataQuery
-        response = self.collection.query.near_vector(near_vector=vector, target_vector=target, limit=limit, return_metadata=MetadataQuery(distance=True))
+    def _near(self, vector, target: str, limit: int, min_ratings: int = 0):
+        from weaviate.classes.query import Filter, MetadataQuery
+        filters = Filter.by_property("rating_count").greater_or_equal(int(min_ratings)) if min_ratings and int(min_ratings) > 0 else None
+        response = self.collection.query.near_vector(
+            near_vector=vector,
+            target_vector=target,
+            filters=filters,
+            limit=limit,
+            return_metadata=MetadataQuery(distance=True),
+        )
         return [(self._movie(obj), self._score(obj)) for obj in response.objects]
 
-    def als_candidates(self, user_id: int, limit: int):
+    def als_candidates(self, user_id: int, limit: int, min_ratings: int = 0):
         vector = self.user_vectors.get(int(user_id))
-        return self._near(vector, "collaborative", limit) if vector else []
+        if not vector:
+            return []
+        return self._near(vector, "collaborative", limit, min_ratings=min_ratings) if min_ratings > 0 else self._near(vector, "collaborative", limit)
 
-    def semantic_candidates(self, query_text: str, limit: int):
-        key = (query_text, limit)
+    def semantic_candidates(self, query_text: str, limit: int, min_ratings: int = 0):
+        key = (query_text, limit, int(min_ratings))
         with self._semantic_cache_lock:
             cached = self._semantic_cache.get(key)
         if cached is not None:
             return cached
-        rows = self._near(self.encoder(query_text), "semantic", limit)
+        vec = self.encoder(query_text)
+        rows = self._near(vec, "semantic", limit, min_ratings=min_ratings) if min_ratings > 0 else self._near(vec, "semantic", limit)
         with self._semantic_cache_lock:
             if len(self._semantic_cache) >= 512:
                 self._semantic_cache.pop(next(iter(self._semantic_cache)))
             self._semantic_cache[key] = rows
         return rows
 
-    def semantic_for_user(self, user_id: int, limit: int):
+    def semantic_for_user(self, user_id: int, limit: int, min_ratings: int = 0):
         profile = self.get_profile(user_id)
         if not profile:
             return []
         query = " ".join(key for key, _ in sorted(profile.genre_preferences.items(), key=lambda item: item[1], reverse=True)[:5])
-        return self.semantic_candidates(query or "电影", limit)
+        return self.semantic_candidates(query or "电影", limit, min_ratings=min_ratings)
 
-    def low_risk_twins(self, movie: Movie, limit: int):
+    def low_risk_twins(self, movie: Movie, limit: int, min_ratings: int = 50):
         from weaviate.classes.query import Filter, MetadataQuery
-        filters = (Filter.by_property("main_genre").equal(movie.main_genre) & Filter.by_property("movie_id").not_equal(movie.movie_id) & Filter.by_property("controversy_score").less_than(0.50))
-        response = self.collection.query.near_vector(near_vector=self.encoder(movie.semantic_text()), target_vector="semantic", filters=filters, limit=limit, return_metadata=MetadataQuery(distance=True))
+        vec = self.encoder(movie.semantic_text())
+        if min_ratings and int(min_ratings) > 0:
+            filtered = (
+                Filter.by_property("main_genre").equal(movie.main_genre)
+                & Filter.by_property("movie_id").not_equal(movie.movie_id)
+                & Filter.by_property("controversy_score").less_than(0.45)
+                & Filter.by_property("rating_count").greater_or_equal(int(min_ratings))
+            )
+            response = self.collection.query.near_vector(near_vector=vec, target_vector="semantic", filters=filtered, limit=limit, return_metadata=MetadataQuery(distance=True))
+            if len(response.objects) >= limit:
+                return [(self._movie(obj), self._score(obj)) for obj in response.objects]
+        fallback_filter = (
+            Filter.by_property("main_genre").equal(movie.main_genre)
+            & Filter.by_property("movie_id").not_equal(movie.movie_id)
+            & Filter.by_property("controversy_score").less_than(0.50)
+        )
+        response = self.collection.query.near_vector(near_vector=vec, target_vector="semantic", filters=fallback_filter, limit=limit, return_metadata=MetadataQuery(distance=True))
         return [(self._movie(obj), self._score(obj)) for obj in response.objects]
 
 
