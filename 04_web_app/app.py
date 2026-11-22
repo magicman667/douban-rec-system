@@ -2,8 +2,10 @@
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import html
+from io import BytesIO
 import urllib.parse
 
+from PIL import Image
 import requests
 import streamlit as st
 
@@ -15,8 +17,6 @@ from analysis_dashboard import overview, panorama
 st.set_page_config(page_title='知影 · CinePulse', page_icon='🎬', layout='wide', initial_sidebar_state='expanded')
 
 st.markdown('''<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 :root {
   --bg: #060913;
   --surface: #0e1525;
@@ -317,11 +317,20 @@ def _fetch_poster_b64(url):
         return ''
     for candidate in _candidate_urls(clean):
         try:
-            resp = requests.get(candidate, timeout=(2.0, 2.5), headers=POSTER_HEADERS)
+            resp = requests.get(candidate, timeout=(1.5, 2.0), headers=POSTER_HEADERS)
             if resp.status_code == 200 and resp.content and resp.headers.get('content-type', '').startswith('image/'):
                 if len(resp.content) <= 2_500_000:
-                    mime = resp.headers.get('content-type', 'image/jpeg').split(';')[0]
-                    return f'data:{mime};base64,' + base64.b64encode(resp.content).decode('ascii')
+                    try:
+                        with Image.open(BytesIO(resp.content)) as img:
+                            img = img.convert('RGB')
+                            img.thumbnail((240, 340), Image.Resampling.LANCZOS)
+                            buf = BytesIO()
+                            img.save(buf, format='JPEG', quality=74, optimize=True)
+                            raw = buf.getvalue()
+                        return 'data:image/jpeg;base64,' + base64.b64encode(raw).decode('ascii')
+                    except OSError:
+                        mime = resp.headers.get('content-type', 'image/jpeg').split(';')[0]
+                        return f'data:{mime};base64,' + base64.b64encode(resp.content).decode('ascii')
         except requests.RequestException:
             continue
     return ''

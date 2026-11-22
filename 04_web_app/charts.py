@@ -200,8 +200,8 @@ def longtail(frame):
     data = frame.sort_values('rating_count', ascending=False).reset_index(drop=True)
     data = data[data['rating_count'] > 0].copy()
     data['rank'] = data.index + 1
-    step = max(1, len(data) // 1800)
-    sampled = pd.concat([data.iloc[:80], data.iloc[80::step], data.tail(1)]).drop_duplicates('rank')
+    step = max(1, len(data) // 360)
+    sampled = pd.concat([data.iloc[:50], data.iloc[50::step], data.tail(1)]).drop_duplicates('rank')
     fig = go.Figure(
         go.Scatter(
             x=sampled['rank'],

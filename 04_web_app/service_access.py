@@ -79,9 +79,9 @@ def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False):
     return picked
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def recommend(uid, genre=None):
-    result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=60)
+    result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=28)
     movies = _prioritize_posters(
         result.get('recommendations') or [],
         top_k=10,
@@ -90,18 +90,18 @@ def recommend(uid, genre=None):
     return {**result, 'recommendations': movies, 'count': len(movies)}
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def search(query, avoid=True):
-    movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=50)
+    movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=25)
     return _prioritize_posters(movies or [], top_k=10, enforce_genre_cap=False)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def detail(movie_id):
     return call('get_controversy_detail_and_twins', movie_id=int(movie_id))
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def alerts(limit=6):
     try:
         docs = list(
@@ -130,7 +130,7 @@ def alerts(limit=6):
     return items
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def personas():
     return data.query('''
         SELECT user_type_label, user_id FROM (
@@ -146,11 +146,11 @@ def personas():
     ''', [data.parquet('user_profiles.parquet'), data.parquet('eval_users')]).to_dict('records')
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def movie_extra(movie_id):
     return data.movies_lookup([movie_id]).get(int(movie_id), {})
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def movie_extras_batch(movie_ids):
     return data.movies_lookup(movie_ids)
