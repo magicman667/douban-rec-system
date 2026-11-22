@@ -169,6 +169,17 @@ def _extract_aspects(comments: list[str], aspect_map: dict[str, tuple[str, ...]]
     return [aspect for _, aspect in scores[:limit]]
 
 
+def _c_to_index(controversy: float) -> int:
+    c = max(0.0, float(controversy or 0.0))
+    if c <= 0.28:
+        val = c / 0.28 * 35.0
+    elif c <= 0.50:
+        val = 35.0 + (c - 0.28) / 0.22 * 35.0
+    else:
+        val = min(100.0, 70.0 + (c - 0.50) / 0.282 * 30.0)
+    return int(round(val))
+
+
 def _fallback_summary(movie_or_pos, pos: list[str] | None = None, neg: list[str] | None = None) -> str:
     if isinstance(movie_or_pos, Movie):
         movie = movie_or_pos
@@ -183,6 +194,7 @@ def _fallback_summary(movie_or_pos, pos: list[str] | None = None, neg: list[str]
     if movie is not None:
         title = re.sub(r"\s*-\s*电影$", "", str(movie.title or "").strip())
         r, z, c = float(movie.bayesian_rating), float(movie.z_genre_score), float(movie.controversy_score)
+        idx = _c_to_index(c)
         if c >= 0.50:
             tier = "高热两极争议片" if z >= 0 else "高风险争议片"
         elif c < 0.28 and z >= 0:
@@ -191,10 +203,10 @@ def _fallback_summary(movie_or_pos, pos: list[str] | None = None, neg: list[str]
             tier = "同类型口碑佳作"
         else:
             tier = "口碑分化较温和作品"
-        lines.append(f"【口碑定性】《{title}》参考口碑 {r:.2f}/5（同类 Z={z:+.2f}，分歧 C={c:.2f}），属于{tier}。")
+        lines.append(f"【口碑定性】《{title}》参考口碑 {r:.2f}/5，分歧指数 {idx}/100（{tier}，原始 C={c:.3f}）。")
 
     if not clean_pos and not clean_neg:
-        lines.append("暂无足够的有效正反方短评样本，建议参考星级分布与同类型平替。")
+        lines.append("📝 短评覆盖说明：该片未收录于开源 104.8 万行短评子集，以上定性基于本系统评分分布，建议结合星级柱状图与同类型平替参考。")
         return "\n".join(lines)
 
     if clean_pos:

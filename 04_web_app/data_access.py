@@ -50,6 +50,49 @@ def clean_title(title):
     return re.sub(r'\s*-\s*电影$', '', str(title or '').strip())
 
 
+def divergence_index_float(controversy):
+    """Map raw C in [0, 1] onto an intuitive 0-100 scale aligned with TDC-Rec thresholds."""
+    try:
+        c = float(controversy or 0.0)
+    except (TypeError, ValueError):
+        c = 0.0
+    if math.isnan(c) or c <= 0.0:
+        return 0.0
+    if c <= 0.28:
+        return round(c / 0.28 * 35.0, 1)
+    if c <= 0.50:
+        return round(35.0 + (c - 0.28) / 0.22 * 35.0, 1)
+    return round(min(100.0, 70.0 + (c - 0.50) / 0.282 * 30.0), 1)
+
+
+def divergence_index(controversy):
+    return int(round(divergence_index_float(controversy)))
+
+
+def divergence_tier(controversy):
+    """Return (index_0_100, tier_label, hex_color, short_tag) aligned with integer display."""
+    idx = divergence_index(controversy)
+    if idx <= 35:
+        return (idx, '口碑一致', '#10b981', '一致')
+    if idx < 70:
+        return (idx, '温和分化', '#f59e0b', '分化')
+    return (idx, '两极争议', '#f43f5e', '两极')
+
+
+def genre_rank_label(z_score):
+    try:
+        z = float(z_score or 0.0)
+    except (TypeError, ValueError):
+        z = 0.0
+    if z >= 1.0:
+        return '同类顶尖'
+    if z >= 0.35:
+        return '优于同类'
+    if z >= -0.35:
+        return '同类均线'
+    return '低于同类'
+
+
 def _to_list(val):
     if val is None or (isinstance(val, float) and math.isnan(val)):
         return []
@@ -278,32 +321,52 @@ def search_catalog(
     return _df_to_records(sub.head(int(limit))), total
 
 
-def hot_mainland_movies(mode='🔥 华语新片热榜', limit=5):
+def hot_mainland_movies(mode='华语新片热榜', limit=5):
     df = load_catalog_df()
-    base = df[df['regions_str'].str.contains('中国大陆', regex=False) & (df['rating_count'] >= 20)]
+    is_cn = df['regions_list'].apply(lambda lst: len(lst) > 0 and lst[0] == '中国大陆')
+    base = df[is_cn & (df['rating_count'] >= 50)]
 
     if '稳妥' in mode:
-        sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] < 0.36) & (base['douban_votes'] >= 50000)]
+        sub = base[(base['controversy_score'] < 0.36) & (base['bayesian_rating'] >= 3.8)]
         if len(sub) < int(limit):
-            sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] < 0.38) & (base['douban_votes'] >= 10000)]
-        sub = sub.sort_values(['bayesian_rating', 'douban_votes'], ascending=[False, False])
+            sub = base[base['controversy_score'] < 0.38]
+        sub = sub.sort_values(['has_cover', 'douban_votes', 'bayesian_rating'], ascending=[False, False, False])
         return _df_to_records(sub.head(int(limit)))
 
     if '争议' in mode:
-        sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] >= 0.50) & (base['douban_votes'] >= 100000)]
-        sub = sub.sort_values(['douban_votes', 'controversy_score'], ascending=[False, False])
+        sub = base[(base['controversy_score'] >= 0.50) & (base['douban_votes'] >= 50000)]
+        if len(sub) < int(limit):
+            sub = base[base['controversy_score'] >= 0.45]
+        sub = sub.sort_values(['has_cover', 'douban_votes', 'controversy_score'], ascending=[False, False, False])
         return _df_to_records(sub.head(int(limit)))
 
-    # Default: blend newest 2018-2019 blockbusters + recent real-poster Mainland hits
-    recent = base[(base['year_int'] >= 2015) & (base['douban_votes'] >= 150000)]
-    postered = recent[recent['has_cover']].sort_values(['year_int', 'douban_votes'], ascending=[False, False]).head(2)
-    newest = recent[recent['year_int'] >= 2018].sort_values('douban_votes', ascending=False).head(int(limit))
-    picked = pd.concat([postered, newest]).drop_duplicates('movie_id')
+    # Default: prioritize authentic Mainland blockbusters with verified posters & reliable sample counts
+    recent = base[(base['year_int'] >= 2012) & base['has_cover']].sort_values(['douban_votes', 'year_int'], ascending=[False, False])
+    picked = recent.head(int(limit))
     if len(picked) < int(limit):
-        more = recent.sort_values('douban_votes', ascending=False)
-        picked = pd.concat([picked, more]).drop_duplicates('movie_id')
-    picked = picked.sort_values('douban_votes', ascending=False).head(int(limit))
+        more = base[base['has_cover']].sort_values(['douban_votes', 'bayesian_rating'], ascending=[False, False])
+        picked = pd.concat([picked, more]).drop_duplicates('movie_id').head(int(limit))
     return _df_to_records(picked)
+
+
+@lru_cache(maxsize=1)
+def region_representative_movies():
+    """Return {primary_region: {'hit': clean_title, 'polarizing': clean_title}} using high-vote films."""
+    df = load_catalog_df()
+    eligible = df[(df['rating_count'] >= 50) & (df['douban_votes'] >= 1000)].copy()
+    eligible['primary_region'] = eligible['regions_list'].apply(lambda lst: str(lst[0]) if lst else '')
+    eligible = eligible[eligible['primary_region'] != '']
+    eligible = eligible.sort_values(['douban_votes', 'bayesian_rating'], ascending=[False, False])
+
+    reps = {}
+    for reg, grp in eligible.groupby('primary_region', sort=False):
+        hit = str(grp['clean_title'].iloc[0])
+        pol_grp = grp[grp['controversy_score'] >= 0.48]
+        if not len(pol_grp):
+            pol_grp = grp.sort_values(['controversy_score', 'douban_votes'], ascending=[False, False])
+        pol = str(pol_grp['clean_title'].iloc[0])
+        reps[str(reg)] = {'hit': hit, 'polarizing': pol}
+    return reps
 
 
 def service_benchmark():

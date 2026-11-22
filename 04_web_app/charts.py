@@ -1,8 +1,11 @@
 """Cinema-grade Plotly visual components built strictly from upstream CSVs."""
 import math
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+
+from data_access import clean_title, divergence_index, divergence_index_float, region_representative_movies
 
 STAR_COLORS = ['#F43F5E', '#FB923C', '#94A3B8', '#38BDF8', '#10B981']
 MODEL_COLORS = {
@@ -76,14 +79,22 @@ def aggregate_world_regions(region_frame):
     )
     agg['avg_bayesian_rating'] = (agg['w_rating'] / agg['movie_count']).round(3)
     agg['avg_controversy'] = (agg['w_contro'] / agg['movie_count']).round(4)
+    agg['divergence_idx'] = agg['avg_controversy'].apply(divergence_index_float).round(1)
     agg['log_count'] = agg['movie_count'].apply(lambda v: math.log10(max(1, int(v))))
     return agg.sort_values('movie_count', ascending=False).reset_index(drop=True)
 
 
 def world_map(region_frame, metric='avg_controversy', projection='natural earth'):
     agg = aggregate_world_regions(region_frame)
+    reps = region_representative_movies()
+    agg['top_consensus_movie'] = agg.apply(
+        lambda r: reps.get(str(r['region']), {}).get('hit') or str(r['top_consensus_movie']), axis=1
+    )
+    agg['top_polarizing_movie'] = agg.apply(
+        lambda r: reps.get(str(r['region']), {}).get('polarizing') or str(r['top_polarizing_movie']), axis=1
+    )
     configs = {
-        'avg_controversy': ('avg_controversy', '评价分歧 C', ['#0C2D48', '#14B8A6', '#F59E0B', '#F43F5E'], (0.04, 0.18)),
+        'avg_controversy': ('divergence_idx', '分歧指数 (0-100)', ['#0C2D48', '#14B8A6', '#F59E0B', '#F43F5E'], (5.0, 23.0)),
         'avg_bayesian_rating': ('avg_bayesian_rating', '贝叶斯口碑', ['#1E293B', '#38BDF8', '#10B981', '#F59E0B'], (3.1, 3.75)),
         'movie_count': ('log_count', '影片规模 (log₁₀)', ['#0F172A', '#1D4ED8', '#38BDF8', '#F59E0B'], (0.0, 4.65)),
     }
@@ -94,7 +105,7 @@ def world_map(region_frame, metric='avg_controversy', projection='natural earth'
         locations='iso_code',
         color=col,
         hover_name='region',
-        custom_data=['movie_count', 'avg_bayesian_rating', 'avg_controversy', 'top_consensus_movie', 'top_polarizing_movie'],
+        custom_data=['movie_count', 'avg_bayesian_rating', 'avg_controversy', 'top_consensus_movie', 'top_polarizing_movie', 'divergence_idx'],
         color_continuous_scale=scale,
         range_color=crange,
         projection=projection,
@@ -106,7 +117,7 @@ def world_map(region_frame, metric='avg_controversy', projection='natural earth'
             '<b>%{hovertext}</b><br>'
             '收录影片：%{customdata[0]:,} 部<br>'
             '平均口碑：%{customdata[1]:.2f} / 5<br>'
-            '评价分歧：%{customdata[2]:.3f}<br>'
+            '分歧指数：%{customdata[5]:.1f} / 100 (原始 C=%{customdata[2]:.3f})<br>'
             '共识代表：%{customdata[3]}<br>'
             '争议代表：%{customdata[4]}<extra></extra>'
         ),
@@ -158,10 +169,12 @@ def rating(frame):
     )
     fig.update_traces(
         textposition='outside',
+        cliponaxis=False,
         textfont=dict(size=11, color='#E2E8F0'),
         marker_line_width=0,
         hovertemplate='<b>%{x}</b><br>评分数：%{y:,}<br>占比：%{text}<extra></extra>',
     )
+    fig.update_yaxes(range=[0, float(df['count'].max()) * 1.22])
     fig.update_layout(showlegend=False)
     return style(fig, '全库 1～5 星评分分布', height=340)
 
@@ -248,29 +261,32 @@ def genre_rating(frame, mode='ratio'):
 
 def bubble(frame):
     df = frame.copy()
+    df['divergence_idx'] = df['avg_controversy'].apply(divergence_index_float).round(1)
     med_x = float(df['avg_bayesian_rating'].median())
-    med_y = float(df['avg_controversy'].median())
+    med_y = float(df['divergence_idx'].median())
+    y_min, y_max = float(df['divergence_idx'].min()), float(df['divergence_idx'].max())
     fig = px.scatter(
         df,
         x='avg_bayesian_rating',
-        y='avg_controversy',
+        y='divergence_idx',
         size='movie_count',
         text='genre',
         hover_name='genre',
-        size_max=52,
-        color='avg_controversy',
+        size_max=42,
+        color='divergence_idx',
         color_continuous_scale=['#14B8A6', '#38BDF8', '#F59E0B', '#F43F5E'],
-        custom_data=['movie_count'],
-        labels={'avg_bayesian_rating': '贝叶斯口碑 (1～5)', 'avg_controversy': '平均分歧 C'},
+        custom_data=['movie_count', 'avg_controversy'],
+        labels={'avg_bayesian_rating': '贝叶斯口碑 (1～5)', 'divergence_idx': '平均分歧指数 (0-100)'},
     )
     fig.update_traces(
         textposition='top center',
         textfont=dict(size=11, color='#E2E8F0'),
         marker=dict(line=dict(width=1.2, color='rgba(255,255,255,0.35)'), opacity=0.88),
-        hovertemplate='<b>%{hovertext}</b><br>影片数：%{customdata[0]:,}<br>平均口碑：%{x:.2f}<br>评价分歧：%{y:.3f}<extra></extra>',
+        hovertemplate='<b>%{hovertext}</b><br>影片数：%{customdata[0]:,}<br>平均口碑：%{x:.2f}<br>分歧指数：%{y:.1f} / 100 (原始 C=%{customdata[1]:.3f})<extra></extra>',
     )
     fig.add_vline(x=med_x, line_dash='dot', line_color='rgba(148,163,184,0.35)')
     fig.add_hline(y=med_y, line_dash='dot', line_color='rgba(148,163,184,0.35)')
+    fig.update_yaxes(range=[max(0.0, y_min - 2.0), y_max + 2.5])
     fig.update_coloraxes(showscale=False)
     return style(fig, '题材口碑 × 分歧四象限', height=390)
 
@@ -278,14 +294,16 @@ def bubble(frame):
 def heatmap(frame, minimum=20):
     values = frame.pivot(index='genre', columns='region', values='avg_controversy')
     counts = frame.pivot(index='genre', columns='region', values='movie_count').reindex_like(values)
-    masked = values.mask(counts < minimum)
+    div_vals = values.map(lambda v: divergence_index_float(v) if pd.notna(v) else float('nan'))
+    masked = div_vals.mask(counts < minimum)
     valid = masked.stack()
     zmin = float(valid.quantile(0.05)) if len(valid) else 0.0
-    zmax = float(valid.quantile(0.95)) if len(valid) else 0.3
+    zmax = float(valid.quantile(0.95)) if len(valid) else 35.0
     if zmax <= zmin:
-        zmin, zmax = 0.0, max(0.25, zmax + 0.05)
+        zmin, zmax = 0.0, max(35.0, zmax + 5.0)
 
-    text_vals = masked.map(lambda v: f'{v:.2f}' if pd.notna(v) else '')
+    text_vals = masked.map(lambda v: f'{v:.0f}' if pd.notna(v) else '')
+    custom = np.dstack([counts.fillna(0).to_numpy(), values.fillna(0).to_numpy()])
     fig = go.Figure(
         data=go.Heatmap(
             z=masked.to_numpy(),
@@ -294,16 +312,16 @@ def heatmap(frame, minimum=20):
             text=text_vals.to_numpy(),
             texttemplate='%{text}',
             textfont=dict(size=10, color='#F8FAFC'),
-            customdata=counts.fillna(0).to_numpy(),
+            customdata=custom,
             colorscale=[[0.0, '#0C2438'], [0.35, '#0F766E'], [0.7, '#F59E0B'], [1.0, '#F43F5E']],
             zmin=zmin,
             zmax=zmax,
             hoverongaps=False,
-            hovertemplate='<b>%{y} · %{x}</b><br>评价分歧：%{z:.3f}<br>影片数：%{customdata:.0f}<extra></extra>',
-            colorbar=dict(title='分歧 C', thickness=11, tickfont=dict(size=10, color='#94A3B8')),
+            hovertemplate='<b>%{y} · %{x}</b><br>分歧指数：%{z:.1f} / 100<br>原始 C：%{customdata[1]:.3f}<br>影片数：%{customdata[0]:.0f}<extra></extra>',
+            colorbar=dict(title='分歧指数', thickness=11, tickfont=dict(size=10, color='#94A3B8')),
         )
     )
-    return style(fig, '产区 × 题材分歧矩阵', height=410, margin=dict(l=20, r=18, t=46, b=36))
+    return style(fig, '产区 × 题材分歧矩阵 (0-100)', height=410, margin=dict(l=20, r=18, t=46, b=36))
 
 
 def model_comparison(model_df):
@@ -329,10 +347,14 @@ def model_comparison(model_df):
     )
     fig.update_traces(
         textposition='outside',
+        cliponaxis=False,
         textfont=dict(size=10, color='#E2E8F0'),
         hovertemplate='<b>%{fullData.name}</b><br>%{x}：%{y:.3f}‰ (原始 %{customdata[0]})<extra></extra>',
     )
-    return style(fig, '四模型排序精度对比（Full-Ranking）', height=340)
+    fig.update_yaxes(range=[0, max(1.0, float(plot_df['值'].max()) * 1.22)])
+    style(fig, '四模型排序精度对比（Full-Ranking）', height=355, margin=dict(l=18, r=18, t=46, b=58))
+    fig.update_layout(legend=dict(orientation='h', y=-0.18, yanchor='top', x=0.5, xanchor='center'))
+    return fig
 
 
 def coverage_and_landmine(model_df, landmine_df):
@@ -351,6 +373,7 @@ def coverage_and_landmine(model_df, landmine_df):
             marker_color=colors,
             text=(m['coverage_10'] * 100.0).map(lambda v: f'{v:.1f}%'),
             textposition='outside',
+            cliponaxis=False,
             textfont=dict(size=11, color='#F8FAFC'),
             hovertemplate='<b>%{x}</b><br>全库覆盖率：%{y:.2f}%<extra></extra>',
         )
@@ -362,6 +385,7 @@ def coverage_and_landmine(model_df, landmine_df):
             y=l['landmine_10'] * 1000.0,
             yaxis='y2',
             mode='lines+markers+text',
+            cliponaxis=False,
             line=dict(color='#FB7185', width=2.5),
             marker=dict(size=9, color='#FB7185', line=dict(color='#060913', width=1.5)),
             text=(l['landmine_10'] * 1000.0).map(lambda v: f'{v:.2f}‰'),
@@ -371,18 +395,23 @@ def coverage_and_landmine(model_df, landmine_df):
         )
     )
     fig.update_layout(
-        yaxis=dict(title='覆盖率 (%)', gridcolor=GRID_COLOR),
-        yaxis2=dict(title='踩雷率 (‰)', overlaying='y', side='right', showgrid=False, rangemode='tozero', tickfont=dict(color='#FDA4AF')),
+        yaxis=dict(title='覆盖率 (%)', gridcolor=GRID_COLOR, range=[0, max(1.0, float((m['coverage_10'] * 100.0).max()) * 1.22)]),
+        yaxis2=dict(title='踩雷率 (‰)', overlaying='y', side='right', showgrid=False, range=[0, max(0.1, float((l['landmine_10'] * 1000.0).max()) * 1.26)], tickfont=dict(color='#FDA4AF')),
     )
-    return style(fig, '长尾覆盖率 ↑ 与稳妥防踩雷 ↓', height=340, margin=dict(l=20, r=42, t=48, b=28))
+    style(fig, '长尾覆盖率 ↑ 与稳妥防踩雷 ↓', height=355, margin=dict(l=20, r=46, t=46, b=58))
+    fig.update_layout(legend=dict(orientation='h', y=-0.18, yanchor='top', x=0.5, xanchor='center'))
+    return fig
 
 
 def rerank_flow(trace_df, movie_titles):
-    df = trace_df.sort_values('rank_after').head(12).copy()
+    dedup = trace_df.sort_values('rank_after').drop_duplicates('rank_after')
+    df = dedup[dedup['rank_after'] <= 10].head(10).copy()
+    if not len(df):
+        df = dedup.head(10).copy()
     fig = go.Figure()
     for _, row in df.iterrows():
         mid = int(row['movie_id'])
-        title = str(movie_titles.get(mid, {}).get('title') or f'#{mid}')[:12]
+        title = clean_title(movie_titles.get(mid, {}).get('title') or f'#{mid}')[:11]
         rb, ra = int(row['rank_before']), int(row['rank_after'])
         delta = rb - ra
         color = '#10B981' if delta > 0 else ('#F43F5E' if delta < 0 else '#64748B')
@@ -398,12 +427,12 @@ def rerank_flow(trace_df, movie_titles):
                 textposition=['middle left', 'middle right'],
                 textfont=dict(size=10, color='#E2E8F0'),
                 showlegend=False,
-                hovertemplate=f'<b>{title}</b><br>位次：#{rb} → #{ra}<br>分歧 C：{row["controversy_score"]:.3f}<extra></extra>',
+                hovertemplate=f'<b>{title}</b><br>位次：#{rb} → #{ra}<br>分歧指数：{divergence_index(row["controversy_score"])}/100 (原始 C={row["controversy_score"]:.3f})<extra></extra>',
             )
         )
-    fig.update_yaxes(autorange='reversed', title_text='排名位次', dtick=5)
-    fig.update_xaxes(range=[-0.28, 1.65])
-    return style(fig, 'TDC-Rec 非对称风险重排位次变化', height=340, margin=dict(l=32, r=18, t=48, b=24))
+    fig.update_yaxes(autorange='reversed', title_text='排名位次', dtick=2)
+    fig.update_xaxes(range=[-0.22, 1.72])
+    return style(fig, 'TDC-Rec 非对称风险重排位次变化', height=360, margin=dict(l=34, r=18, t=46, b=24))
 
 
 def arch_benchmark(wc_df, parallel_df, bench_dict):
@@ -427,8 +456,10 @@ def arch_benchmark(wc_df, parallel_df, bench_dict):
         color_discrete_map={'WordCount 对照': '#38BDF8', '逻辑并行实测': '#F59E0B'},
         labels={'任务': '', '耗时 (秒)': '端到端耗时 (s)'},
     )
-    fig1.update_traces(textposition='outside', textfont=dict(size=11, color='#F8FAFC'))
-    style(fig1, '离线批计算与 YARN 并行实测', height=300, margin=dict(l=18, r=40, t=46, b=24))
+    fig1.update_traces(textposition='outside', cliponaxis=False, textfont=dict(size=11, color='#F8FAFC'))
+    fig1.update_xaxes(range=[0, float(df['耗时 (秒)'].max()) * 1.26])
+    style(fig1, '离线批计算与 YARN 并行实测', height=315, margin=dict(l=18, r=36, t=46, b=56))
+    fig1.update_layout(legend=dict(orientation='h', y=-0.22, yanchor='top', x=0.5, xanchor='center'))
 
     lat_rows = [
         {'接口': '双向量推荐', 'P50 (ms)': bench_dict['recommendations']['p50_ms'], 'P95 (ms)': bench_dict['recommendations']['p95_ms']},
@@ -446,8 +477,10 @@ def arch_benchmark(wc_df, parallel_df, bench_dict):
         color_discrete_map={'P50 (ms)': '#10B981', 'P95 (ms)': '#F59E0B'},
         labels={'接口': '', '延迟 (ms)': '在线响应 (ms)'},
     )
-    fig2.update_traces(textposition='outside', textfont=dict(size=11, color='#F8FAFC'))
-    style(fig2, 'Weaviate + MongoDB 毫秒级在线延迟', height=300)
+    fig2.update_traces(textposition='outside', cliponaxis=False, textfont=dict(size=11, color='#F8FAFC'))
+    fig2.update_yaxes(range=[0, float(lat_df['延迟 (ms)'].max()) * 1.25])
+    style(fig2, 'Weaviate + MongoDB 毫秒级在线延迟', height=315, margin=dict(l=18, r=18, t=46, b=56))
+    fig2.update_layout(legend=dict(orientation='h', y=-0.22, yanchor='top', x=0.5, xanchor='center'))
     return fig1, fig2
 
 
@@ -459,10 +492,12 @@ def star_mini(hist):
             marker_color=STAR_COLORS,
             text=[f'{int(v):,}' for v in hist],
             textposition='outside',
+            cliponaxis=False,
             textfont=dict(size=10, color='#CBD5E1'),
             hovertemplate='%{x}：%{y:,} 人<extra></extra>',
         )
     )
+    fig.update_yaxes(range=[0, max(1, max(hist)) * 1.25])
     fig.update_layout(showlegend=False)
     return style(fig, '1～5 星口碑波形', height=240, margin=dict(l=12, r=12, t=36, b=18))
 

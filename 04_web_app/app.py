@@ -2,18 +2,38 @@
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import html
+import importlib
 from io import BytesIO
 import logging
+import os
 import urllib.parse
 
 from PIL import Image
 import requests
 import streamlit as st
 
+import analysis_dashboard as dash
 import charts
 import data_access as data
 import service_access as service
-from analysis_dashboard import overview, panorama
+
+
+def _sync_submodules():
+    changed = False
+    for mod in (data, charts, dash):
+        path = getattr(mod, '__file__', None)
+        if not path:
+            continue
+        mtime = os.path.getmtime(path)
+        if getattr(mod, '_hot_mtime', 0.0) != mtime:
+            importlib.reload(mod)
+            mod._hot_mtime = mtime
+            changed = True
+    if changed:
+        st.cache_data.clear()
+
+
+_sync_submodules()
 
 st.set_page_config(page_title='知影 · CinePulse', page_icon='🎬', layout='wide', initial_sidebar_state='expanded')
 
@@ -300,6 +320,38 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
   border-left: 3px solid #f43f5e;
   padding: 8px 11px; border-radius: 6px; margin-bottom: 7px; font-size: 12.5px; color: #e2e8f0;
 }
+.div-gauge {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 6px 0 10px;
+}
+.div-gauge-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: #cbd5e1; gap: 8px; flex-wrap: wrap;
+}
+.div-gauge-track {
+  position: relative; height: 10px; border-radius: 999px; margin: 11px 0 7px;
+  background: linear-gradient(90deg, #10b981 0%, #10b981 35%, #f59e0b 35%, #f59e0b 70%, #f43f5e 70%, #f43f5e 100%);
+}
+.div-gauge-dot {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #f8fafc; border: 3px solid #0f172a;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.75); z-index: 3;
+}
+.div-gauge-tau {
+  position: absolute; top: -4px; bottom: -4px; width: 2px;
+  transform: translateX(-50%);
+  background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.9); z-index: 2;
+}
+.div-gauge-ticks {
+  display: flex; justify-content: space-between; font-size: 10.5px; color: #94a3b8;
+}
+.div-gauge-foot {
+  font-size: 11px; color: #94a3b8; margin-top: 5px;
+}
 
 /* Sidebar Telemetry */
 .brand-box { padding: 4px 0 10px; }
@@ -408,10 +460,12 @@ def _prefetch_posters(movies):
 def _fmt_votes(votes, rating_count):
     v = int(votes or 0)
     if v >= 10000:
-        return f'{v / 10000:.1f}万人'
+        return f'{v / 10000:.1f}万人评'
     if v >= 1000:
-        return f'{v:,}人'
-    return f'{int(rating_count or 0):,}评'
+        return f'{v:,}人评'
+    if v > 0:
+        return f'{v}人评'
+    return f'样本{int(rating_count or 0):,}条'
 
 
 def _poster_html(movie, poster_cache=None):
@@ -476,7 +530,6 @@ def _cards(movies, context):
             cols = st.columns(cols_per_row, gap='small')
         score = float(merged.get('bayesian_rating', 0))
         c_val = float(merged.get('controversy_score', 0))
-        z_val = float(merged.get('z_genre_score', 0))
         count = int(merged.get('rating_count', 0))
         votes = int(merged.get('douban_votes', 0))
         title = html.escape(data.clean_title(merged.get('title')))
@@ -491,9 +544,8 @@ def _cards(movies, context):
             cast_parts.append(f'导: {directors.split("/")[0].strip()}')
         cast_line = html.escape(' · '.join(cast_parts) or '经典片库')
         badge_text, badge_cls = _archetype_badge(merged)
-        c_pct = min(100, max(6, int(c_val * 100)))
-        c_color = '#10b981' if c_val < 0.28 else ('#f59e0b' if c_val < 0.50 else '#f43f5e')
-        z_str = f'Z {z_val:+.2f}'
+        div_idx, div_lbl, div_col, div_short = data.divergence_tier(c_val)
+        c_pct = min(100, max(6, div_idx))
 
         with cols[idx % cols_per_row]:
             st.markdown(
@@ -508,9 +560,9 @@ def _cards(movies, context):
                 f'<div class="film-meta">{meta_line}</div>'
                 f'<div class="film-cast">{cast_line}</div>'
                 f'<div class="meter-row">'
-                f'<span>分歧 {c_val:.2f}</span>'
-                f'<div class="meter-track"><div class="meter-fill" style="width:{c_pct}%;background:{c_color}"></div></div>'
-                f'<span>{z_str}</span>'
+                f'<span title="口碑分歧指数 {div_idx}/100（{div_lbl}，原始 C={c_val:.3f}）">分歧 {div_idx}</span>'
+                f'<div class="meter-track"><div class="meter-fill" style="width:{c_pct}%;background:{div_col}"></div></div>'
+                f'<span style="color:{div_col};font-weight:600">{div_short}</span>'
                 f'</div>'
                 f'</div></div>',
                 unsafe_allow_html=True,
@@ -570,11 +622,44 @@ def detail():
 
         if result.get('stream_alert'):
             st.error('⚡ Spark Streaming 实时预警：' + (result.get('recent_drop_msg') or '近期一星差评激增'))
+        score = float(movie.get('bayesian_rating', 0))
+        z_val = float(movie.get('z_genre_score', 0))
+        c_val = float(movie.get('controversy_score', 0))
+        div_idx, div_lbl, div_col, _ = data.divergence_tier(c_val)
+        active_tau = float(st.session_state.get('active_tau', 0.28))
+        active_label = str(st.session_state.get('active_user_label', '稳妥防雷派'))
+        tau_idx = data.divergence_index(active_tau)
+        votes = int(extra.get('douban_votes') or 0)
+        sample_cnt = int(extra.get('rating_count') or movie.get('rating_count') or 0)
+        verdict = '超出防雷线' if div_idx > tau_idx else ('安全可看' if div_idx <= 35 else '在耐受内')
+
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric('贝叶斯口碑', f'{float(movie.get("bayesian_rating", 0)):.2f} / 5')
-        m2.metric('同类相对分 Z', f'{float(movie.get("z_genre_score", 0)):+.2f}')
-        m3.metric('耦合分歧 C', f'{float(movie.get("controversy_score", 0)):.3f}')
-        m4.metric('全网热度', _fmt_votes(extra.get('douban_votes', 0), extra.get('rating_count', 0)))
+        m1.metric('贝叶斯口碑', f'{score:.2f} / 5', f'{data.genre_rank_label(z_val)} · Z {z_val:+.2f}')
+        m2.metric('分歧指数', f'{div_idx} / 100', f'{div_lbl} · C={c_val:.3f}', delta_color='inverse' if c_val >= 0.50 else 'off')
+        m3.metric('豆瓣全站热度', _fmt_votes(votes, sample_cnt) if votes > 0 else '未收录全站数', f'建模样本 {sample_cnt:,} 条 (80%训练集)', delta_color='off')
+        m4.metric('当前画像判定', verdict, f'{active_label} 耐受≤{tau_idx}', delta_color='inverse' if div_idx > tau_idx else 'normal')
+
+        if div_idx > tau_idx:
+            gauge_foot = f'超出当前画像耐受线 {div_idx - tau_idx} 分 → 算法触发非对称防雷降权'
+        else:
+            gauge_foot = f'位于当前画像耐受区间内（余量 {tau_idx - div_idx} 分）→ 放心观看'
+        st.markdown(
+            f'<div class="div-gauge">'
+            f'<div class="div-gauge-head">'
+            f'<span><b>⚖️ 口碑分歧标尺</b>（本片 <b style="color:{div_col}">{div_idx}/100 · {div_lbl}</b>）</span>'
+            f'<span style="color:#38bdf8">蓝色竖线 = {html.escape(active_label)} 防雷线 ({tau_idx})</span>'
+            f'</div>'
+            f'<div class="div-gauge-track">'
+            f'<div class="div-gauge-tau" style="left:{tau_idx}%"></div>'
+            f'<div class="div-gauge-dot" style="left:{div_idx}%;border-color:{div_col}"></div>'
+            f'</div>'
+            f'<div class="div-gauge-ticks">'
+            f'<span>0 口碑一致</span><span>35 稳妥界线</span><span>70 高危红线 (Top 5%)</span><span>100 极度两极</span>'
+            f'</div>'
+            f'<div class="div-gauge-foot">{gauge_foot}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
         storyline = str(extra.get('storyline') or '').strip()
         if storyline:
@@ -583,26 +668,30 @@ def detail():
         hist = list(extra.get('hist_5bins', []))
         if len(hist) == 5 and sum(hist):
             st.plotly_chart(charts.star_mini(hist), width='stretch', config={'displayModeBar': False})
+            st.caption(f'星级分布基于 80% 训练集抽样评分（共 {sum(hist):,} 条；公开数据集每片抽样上限约 320 条）')
 
     summary = str(result.get('ai_summary') or '暂无正反方短评摘要。')
     summary_html = html.escape(summary).replace('\n', '<br>')
     st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{summary_html}</div>', unsafe_allow_html=True)
 
-    pos_col, neg_col = st.columns(2, gap='medium')
-    with pos_col:
-        st.markdown('**👍 五星好评**')
-        pos = result.get('pos_comments') or []
-        if not pos:
-            st.caption('暂无五星短评')
-        for text in pos[:3]:
-            st.markdown(f'<div class="quote-pos">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
-    with neg_col:
-        st.markdown('**👎 一星差评**')
-        neg = result.get('neg_comments') or []
-        if not neg:
-            st.caption('暂无一星短评')
-        for text in neg[:3]:
-            st.markdown(f'<div class="quote-neg">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
+    pos = result.get('pos_comments') or []
+    neg = result.get('neg_comments') or []
+    if not pos and not neg:
+        st.caption('💡 该片未收录于开源 104.8 万行文本短评子集（原始 CSV 受 Excel 行数上限截断），上方已基于评分分布与双向量特征为您完成排雷诊断。')
+    else:
+        pos_col, neg_col = st.columns(2, gap='medium')
+        with pos_col:
+            st.markdown('**👍 五星好评**')
+            if not pos:
+                st.caption('暂无五星短评')
+            for text in pos[:3]:
+                st.markdown(f'<div class="quote-pos">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
+        with neg_col:
+            st.markdown('**👎 一星差评**')
+            if not neg:
+                st.caption('暂无一星短评')
+            for text in neg[:3]:
+                st.markdown(f'<div class="quote-neg">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
 
     st.markdown('**🛡️ 同类型零差评平替（Weaviate 向量检索）**')
     twins = result.get('safe_twins') or []
@@ -612,11 +701,13 @@ def detail():
         t_cols = st.columns(len(twins), gap='small')
         for idx, twin in enumerate(twins):
             twin_name = data.clean_title(twin.get('title'))
+            twin_idx, _, _, twin_short = data.divergence_tier(twin.get('controversy_score', 0))
+            sim_pct = int(round(float(twin.get('similarity_score', 0)) * 100))
             with t_cols[idx]:
                 st.markdown(
                     f'<div class="glass-card" style="padding:10px 12px;margin-bottom:6px">'
                     f'<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{html.escape(twin_name)}</div>'
-                    f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">★ {float(twin["bayesian_rating"]):.2f} · 分歧 {float(twin["controversy_score"]):.2f} · 相似度 {float(twin.get("similarity_score", 0)):.2f}</div>'
+                    f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">★ {float(twin["bayesian_rating"]):.2f} · 分歧 {twin_idx}/100 ({twin_short}) · 相似 {sim_pct}%</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -680,11 +771,11 @@ def hall():
         with sp2:
             cn_mode = st.segmented_control(
                 '华语榜单',
-                ['🔥 华语新片热榜', '🛡️ 华语稳妥佳作', '⚡ 华语高热争议'],
-                default='🔥 华语新片热榜',
+                ['华语新片热榜', '华语稳妥佳作', '华语高热争议'],
+                default='华语新片热榜',
                 label_visibility='collapsed',
                 key='cn_spotlight_mode',
-            ) or '🔥 华语新片热榜'
+            ) or '华语新片热榜'
 
         try:
             mainland_movies = service.hot_mainland(mode=cn_mode, limit=5)
@@ -705,21 +796,21 @@ def hall():
 
         personas = service.personas()
         label_map = {
-            '稳妥防雷派': '🛡️ 稳妥防雷',
-            '均衡观影派': '⚖️ 均衡观影',
-            '猎奇探索派': '🔥 猎奇探索',
+            '稳妥防雷派': '稳妥防雷',
+            '均衡观影派': '均衡观影',
+            '猎奇探索派': '猎奇探索',
         }
-        ordered_labels = ['🛡️ 稳妥防雷', '⚖️ 均衡观影', '🔥 猎奇探索']
+        ordered_labels = ['稳妥防雷', '均衡观影', '猎奇探索']
         option_uid = {label_map.get(p['user_type_label'], p['user_type_label']): int(p['user_id']) for p in personas}
         choices = [lbl for lbl in ordered_labels if lbl in option_uid] or list(option_uid.keys())
 
         mode_specs = {
-            '🔥 经典热片': (100, 0.18, 'Filtered HNSW ≥100评'),
-            '✨ 主流口碑': (50, 0.14, 'Filtered HNSW ≥50评'),
-            '💎 全库挖宝': (0, 0.0, '全库 140,502 无过滤'),
+            '经典热片': (100, 0.18, 'Filtered HNSW ≥100评'),
+            '主流口碑': (50, 0.14, 'Filtered HNSW ≥50评'),
+            '全库挖宝': (0, 0.0, '全库 140,502 无过滤'),
         }
 
-        bar1, bar2, bar3, bar4, bar5 = st.columns([1.65, 1.65, 1.0, 0.95, 0.65], gap='small')
+        bar1, bar2, bar3, bar4, bar5 = st.columns([1.85, 1.85, 0.85, 0.85, 0.60], gap='small')
         with bar1:
             chosen = st.segmented_control('观影口味', choices, default=choices[0], label_visibility='collapsed') or choices[0]
         uid = option_uid[chosen]
@@ -727,9 +818,9 @@ def hall():
             pop_mode = st.segmented_control(
                 '选片风格',
                 list(mode_specs.keys()),
-                default='✨ 主流口碑',
+                default='主流口碑',
                 label_visibility='collapsed',
-            ) or '✨ 主流口碑'
+            ) or '主流口碑'
         min_r, pop_w, mode_desc = mode_specs[pop_mode]
         with bar3:
             rec_region = st.selectbox('推荐地区', ['全部地区', '中国大陆', '华语电影'], label_visibility='collapsed', key='rec_region_select')
@@ -761,9 +852,13 @@ def hall():
             prefs = user_info.get('genre_preferences') or {}
             top_pref = ' · '.join(sorted(prefs, key=prefs.get, reverse=True)[:3]) or '多元题材'
             tau = float(user_info.get('tolerance_tau', 0.0))
+            user_label = user_info.get('user_type_label', '均衡观影派')
+            st.session_state['active_tau'] = tau
+            st.session_state['active_user_label'] = user_label
+            tau_idx = data.divergence_index(tau)
             k1, k2, k3, k4 = st.columns(4, gap='small')
-            k1.metric('当前画像', user_info.get('user_type_label', '均衡观影派'), f'档案 #{user_info["user_id"]}')
-            k2.metric('争议容忍度 τ', f'{tau:.2f}', '自动压降高分歧' if tau < 0.28 else ('保留两极佳作' if tau > 0.50 else '口碑多样性均衡'))
+            k1.metric('当前画像', user_label, f'档案 #{user_info["user_id"]}')
+            k2.metric('分歧耐受上限', f'{tau_idx} / 100', f'原始 τ={tau:.2f} · ' + ('拦截 ≥35 分' if tau < 0.28 else ('专探 ≥70 分两极片' if tau > 0.50 else '拦截 ≥70 分高危片')))
             k3.metric('偏好题材', top_pref, f'历史 {int(user_info.get("rating_count", 0)):,} 部')
             k4.metric('检索范围', f'{rec_region} · {pop_mode.split()[-1]}', mode_desc)
 
@@ -774,7 +869,7 @@ def hall():
                 _cards(movies, 'rec')
 
     with catalog:
-        quick_queries = ['流浪地球', '我不是药神', '哪吒之魔童降世', '影', '大鱼海棠', '霸王别姬', '肖申克的救赎', '周星驰']
+        quick_queries = ['流浪地球', '我不是药神', '哪吒', '霸王别姬', '肖申克', '大鱼海棠', '无极', '周星驰']
         q_cols = st.columns(len(quick_queries) + 1, gap='small')
         for idx, q_text in enumerate(quick_queries):
             with q_cols[idx]:
@@ -844,12 +939,12 @@ def hall():
 
         if cat_movies:
             avg_r = sum(float(m.get('bayesian_rating', 0)) for m in cat_movies) / len(cat_movies)
-            avg_c = sum(float(m.get('controversy_score', 0)) for m in cat_movies) / len(cat_movies)
+            avg_div = int(round(sum(data.divergence_index_float(m.get('controversy_score', 0)) for m in cat_movies) / len(cat_movies)))
             head_txt = f'🔍 关键词「<b>{html.escape(active_cat_q)}</b>」命中 <b>{total_hits:,}</b> 部' if active_cat_q else f'🔥 <b>{html.escape(cat_region)} · {html.escape(cat_sort)}</b>（共 {total_hits:,} 部符合条件）'
             st.markdown(
                 f'<div class="summary-strip">'
                 f'<span>{head_txt}</span>'
-                f'<span>展示 Top {len(cat_movies)} · 平均口碑 <b>★ {avg_r:.2f}</b> · 平均分歧 <b>{avg_c:.2f}</b></span>'
+                f'<span>展示 Top {len(cat_movies)} · 平均口碑 <b>★ {avg_r:.2f}</b> · 平均分歧 <b>{avg_div}/100</b></span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -919,13 +1014,14 @@ with st.sidebar:
         '<div class="engine-item"><span>Hadoop · YARN</span><b>3 节点集群</b></div>'
         '<div class="engine-item"><span>Hive · Spark</span><b>416.9 万评分</b></div>'
         '<div class="engine-item"><span>Weaviate</span><b>140,502 双向量</b></div>'
+        '<div class="engine-item"><span>分歧标尺</span><b>0-35一致 · ≥70高危</b></div>'
         f'<div class="engine-item"><span>Streaming</span><b>{live_alerts} 条实时预警</b></div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
 try:
-    {'发现电影': hall, '口碑全景': panorama, '观影发现': overview}[page]()
+    {'发现电影': hall, '口碑全景': dash.panorama, '观影发现': dash.overview}[page]()
 except Exception:
     logging.exception('page failed: %s', page)
     st.warning('页面加载异常，请刷新重试。')

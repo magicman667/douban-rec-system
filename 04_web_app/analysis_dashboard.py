@@ -34,19 +34,19 @@ def panorama():
     with c1:
         metric_label = st.segmented_control(
             '地图指标',
-            ['评价分歧 C', '平均口碑', '影片产量'],
-            default='评价分歧 C',
+            ['分歧指数', '平均口碑', '影片产量'],
+            default='分歧指数',
             label_visibility='collapsed',
-        ) or '评价分歧 C'
+        ) or '分歧指数'
     with c2:
         proj_label = st.segmented_control(
             '视角',
-            ['🗺️ 世界平面', '🌍 3D 地球仪'],
-            default='🗺️ 世界平面',
+            ['世界平面', '3D 地球仪'],
+            default='世界平面',
             label_visibility='collapsed',
-        ) or '🗺️ 世界平面'
+        ) or '世界平面'
 
-    metric_key = {'评价分歧 C': 'avg_controversy', '平均口碑': 'avg_bayesian_rating', '影片产量': 'movie_count'}[metric_label]
+    metric_key = {'分歧指数': 'avg_controversy', '平均口碑': 'avg_bayesian_rating', '影片产量': 'movie_count'}[metric_label]
     proj_key = 'natural earth' if '平面' in proj_label else 'orthographic'
 
     map_col, rank_col = st.columns([2.45, 1.05], gap='medium')
@@ -55,6 +55,7 @@ def panorama():
             show(charts.world_map(region_stats, metric=metric_key, projection=proj_key))
 
     with rank_col:
+        reps = data.region_representative_movies()
         top8 = agg_world.head(8)
         rows_html = []
         for idx, row in top8.iterrows():
@@ -62,8 +63,10 @@ def panorama():
             cnt = int(row['movie_count'])
             rat = float(row['avg_bayesian_rating'])
             con = float(row['avg_controversy'])
-            gem = html.escape(str(row['top_consensus_movie'])[:11])
-            pct = min(100, int(con / 0.22 * 100))
+            div_idx = data.divergence_index(con)
+            rep_title = reps.get(str(row['region']), {}).get('hit') or str(row['top_consensus_movie'])
+            gem = html.escape(rep_title[:12])
+            pct = min(100, int(div_idx / 25 * 100))
             bar_color = '#10B981' if con < 0.10 else ('#F59E0B' if con < 0.14 else '#F43F5E')
             rows_html.append(
                 f'<div class="rank-row">'
@@ -71,7 +74,7 @@ def panorama():
                 f'<span class="rank-name">{r_name}</span>'
                 f'<span class="rank-meta">{cnt:,}部 · ★{rat:.2f}</span></div>'
                 f'<div class="rank-sub"><div class="mini-bar"><div style="width:{pct}%;background:{bar_color}"></div></div>'
-                f'<span class="rank-gem">C={con:.3f} · {gem}</span></div>'
+                f'<span class="rank-gem">分歧 {div_idx} · {gem}</span></div>'
                 f'</div>'
             )
         st.markdown(
@@ -187,7 +190,7 @@ def overview():
         for uid in user_ids:
             tau = float(trace_all.loc[trace_all['user_id'] == uid, 'tolerance_tau'].iloc[0])
             tag = '稳妥防雷' if tau < 0.28 else ('均衡观影' if tau <= 0.50 else '猎奇探索')
-            u_map[f'#{uid} · {tag} (τ={tau:.2f})'] = uid
+            u_map[f'#{uid} · {tag} (耐受 {data.divergence_index(tau)}/100 · τ={tau:.2f})'] = uid
         with st.container(border=True):
             picked_label = st.selectbox('代表用户重排追踪', list(u_map.keys()), label_visibility='collapsed')
             sub_trace = trace_all[trace_all['user_id'] == u_map[picked_label]]

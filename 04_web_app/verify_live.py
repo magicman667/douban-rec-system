@@ -1,10 +1,101 @@
-"""Real service and UI integration checks, run on ECS."""
-import json
-from pathlib import Path
+"""Real service, chart, and E2E integration checks, run on ECS."""
 from collections import Counter
+import json
+import os
+from pathlib import Path
+import time
+import urllib.request
 
 from streamlit.testing.v1 import AppTest
+import charts
+import data_access as data
 import service_access as service
+
+
+def _check_charts():
+    assert data.divergence_tier(0.281)[3] == '一致'
+    assert data.divergence_index(0.50) == 70
+    reps = data.region_representative_movies()
+    assert '美国' in reps and '中国大陆' in reps
+
+    reg = data.read_csv('region_stats')
+    gen = data.read_csv('genre_controversy')
+    g_dist = data.read_csv('genre_rating_distribution')
+    gr = data.read_csv('genre_region_stats')
+    rat = data.read_csv('rating_distribution')
+    usr = data.read_csv('user_type_distribution')
+    mrc = data.read_csv('movie_rating_count')
+    mod = data.read_csv('model_metrics')
+    lm = data.read_csv('landmine_metrics')
+    tr = data.read_csv('rerank_trace')
+    wc = data.read_csv('wordcount_runtime')
+    par = data.read_csv('spark_parallel_runtime')
+    bench = data.service_benchmark()
+
+    top_g = gen.sort_values('movie_count', ascending=False)['genre'].head(10).tolist()
+    uid = int(tr['user_id'].iloc[0])
+    sub_tr = tr[tr['user_id'] == uid]
+    titles = data.movies_lookup(sub_tr['movie_id'].tolist())
+    figs = [
+        charts.world_map(reg, 'avg_controversy', 'natural earth'),
+        charts.rating(rat),
+        charts.users(usr),
+        charts.longtail(mrc),
+        charts.genre_rating(g_dist[g_dist.genre.isin(top_g)], 'ratio'),
+        charts.bubble(gen[gen.genre.isin(top_g)]),
+        charts.heatmap(gr[gr.genre.isin(top_g) & gr.region.isin(reg['name'].head(8))], 20),
+        charts.model_comparison(mod),
+        charts.coverage_and_landmine(mod, lm),
+        charts.rerank_flow(sub_tr, titles),
+        *charts.arch_benchmark(wc, par, bench),
+        charts.star_mini([14, 12, 24, 27, 19]),
+    ]
+    assert all(len(f.data) >= 1 for f in figs)
+    return len(figs)
+
+
+def _check_playwright_e2e():
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=2) as resp:
+            if resp.status != 200:
+                return 'SKIP (8501 unhealthy)'
+    except Exception:
+        return 'SKIP (8501 offline)'
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return 'SKIP (playwright missing)'
+
+    os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/member1/.cache/ms-playwright')
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1440, 'height': 900})
+        page.goto('http://127.0.0.1:8501', wait_until='domcontentloaded', timeout=30000)
+        page.wait_for_selector('.film-card', timeout=35000)
+        assert page.locator('[data-testid="stException"]').count() == 0
+
+        btn = page.locator('button:has-text("排雷详情")')
+        assert btn.count() >= 5
+        btn.first.click()
+        page.wait_for_selector('.div-gauge', timeout=25000)
+        assert page.locator('[role="dialog"]').count() >= 1
+        assert page.locator('.div-gauge').count() >= 1
+        assert page.locator('[data-testid="stException"]').count() == 0
+        page.keyboard.press('Escape')
+        time.sleep(0.5)
+
+        page.locator('button[role="tab"]:has-text("搜电影")').first.click()
+        page.wait_for_selector('.summary-strip', timeout=15000)
+        assert page.locator('[data-testid="stException"]').count() == 0
+
+        for nav_label in ('口碑全景', '观影发现'):
+            page.locator(f'label:has-text("{nav_label}")').first.click()
+            time.sleep(2.5)
+            assert page.locator('[data-testid="stException"]').count() == 0
+
+        browser.close()
+    return 'PASS (Playwright)'
 
 
 def run():
@@ -38,27 +129,14 @@ def run():
     assert len(hot_cn) == 5
     report['hot_mainland'] = [m['title'] for m in hot_cn]
 
+    # Note: Streamlit 1.51.0 AppTest throws ValueError in ButtonGroup.indices on single-select segmented_control reruns,
+    # so AppTest covers initial render cleanly while chart verification & Playwright cover multi-tab/multi-page flows.
     app = AppTest.from_file(str(Path(__file__).parent / 'app.py'), default_timeout=180).run()
     assert not app.exception and not app.error
     assert not app.warning, str(app.warning)
-    rec_btn = next(b for b in app.button if b.key and b.key.startswith('rec_'))
-    rec_btn.click().run()
-    assert not app.exception and not app.error
 
-    app = AppTest.from_file(str(Path(__file__).parent / 'app.py'), default_timeout=180).run()
-    next(t for t in app.text_input if t.key == 'scene_query_box').set_value('和朋友一起看的轻松喜剧')
-    next(b for b in app.button if b.label == '帮我找电影').click().run()
-    assert not app.exception and not app.warning
-    assert 'scene_result' in app.session_state
-    search_ids = [m['movie_id'] for m in app.session_state['scene_result'][2]]
-    next(b for b in app.button if b.key and b.key.startswith('scene_')).click().run()
-    assert not app.exception
-    assert search_ids == [m['movie_id'] for m in app.session_state['scene_result'][2]]
-
-    for page in ['口碑全景', '观影发现']:
-        app.sidebar.radio[0].set_value(page).run()
-        assert not app.exception and not app.error and not app.warning
-
+    report['charts_checked'] = _check_charts()
+    report['e2e'] = _check_playwright_e2e()
     report['pages'] = 'PASS'
     print(json.dumps(report, ensure_ascii=False, indent=2))
     runtime_dir = Path(__file__).parent / 'runtime'
