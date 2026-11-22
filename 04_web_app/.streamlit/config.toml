@@ -1,0 +1,7 @@
+[global]
+minCachedMessageSize = 50000000
+maxCachedMessageAge = 10
+
+[server]
+enableWebsocketCompression = false
+maxMessageSize = 400
