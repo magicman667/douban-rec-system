@@ -1,0 +1,4 @@
+stage,workers,executor_cores,executor_memory_mb,yarn_app_id,runtime_sec,speedup_vs_1w
+feature_engineering,1,1,2400,application_1795351088747_0001,54.940,1.000
+feature_engineering,2,1,2400,application_1795351088747_0002,45.745,1.201
+als_train_rank50,2,1,2400,application_1795092209751_0006,176.000,

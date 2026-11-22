@@ -35,6 +35,7 @@ derby.log
 !01_cluster_hive/genre_tag_wc.csv
 !02_spark_als/genre_stats.csv
 !02_spark_als/region_stats.csv
+!02_spark_als/region_iso_codes.csv
 !analysis/01_data/*.csv
 !analysis/02_spark/*.csv
 !analysis/03_eval/*.csv

@@ -12,9 +12,19 @@ Spark 任务读取 Hive 电影维表和训练评分表。1 号先把每位用户
 
 从用户的训练正评中计算电影类型占比，以正评影片的平均争议度和高争议影片的正向打分溢价构建争议容忍度。按 0.28 和 0.50 两个阈值划分稳妥防雷派、均衡观影派和猎奇探索派。Spark MLlib 在显式 1～5 星评分上训练 rank=50 的 ALS，分别导出用户与电影向量，用于 3 号的召回服务和标准 ALS 对照。
 
-## 4.4 全量运行记录
+## 4.4 全量运行记录与单/双 Worker 逻辑并行效率对照
 
-运行验收后补入 Hive 表行数、产物行数和向量维度，附特征聚合与 ALS 任务的 Spark DAG。用同一台 ECS、同一份训练输入和同一组模型参数比较单 Worker 与双 Worker 的任务耗时，分别记录特征和训练耗时。证据以全量作业日志和界面截图为准。
+全量运行基于 `douban_db`（`movies` 140,502 行、`train_ratings` 3,270,299 行、`test_ratings` 898,729 行），产物校验零异常：`movie_features.parquet` 140,502 行、`user_profiles.parquet` 600,344 行、`als_factors.parquet` 含 600,344 用户向量与 67,329 电影向量（均为 50 维）、`eval_users` 185,149 名评测用户；产区统计表 `region_stats.csv` 结合 `region_iso_codes.csv` 映射 129 个国家/地区条目，覆盖已知产区影片的 **99.43%**。
+
+在同一台 8 vCPU / 32 GiB 华为云 ECS、相同 HDFS 全量输入（`/warehouse/douban_full_v1`）与相同 Executor 配额（1 核 / 2,400 MiB，`spark.sql.shuffle.partitions=32`）下，实测单 Worker 与双 Worker 容器配置的逻辑并行效率如下（来源：`analysis/02_spark/spark_parallel_runtime.csv`）：
+
+| 作业阶段 | 逻辑 Worker 数 | YARN Application ID | 端到端耗时（秒） | 相对单 Worker 加速比 | 说明 |
+| --- | ---: | --- | ---: | ---: | --- |
+| 全量特征工程 | 1 Worker | `application_1795351088747_0001` | 54.940 | 1.000x | 单容器执行，含 YARN 启动开销 |
+| 全量特征工程 | 2 Workers | `application_1795351088747_0002` | 45.745 | **1.201x** | 双容器并行（与首次全量实测 45s 一致） |
+| ALS 训练（rank=50） | 2 Workers | `application_1795092209751_0006` | 176.000 | — | worker1 完成 164 tasks，worker2 完成 134 tasks |
+
+该对照仅反映单台 ECS 上多容器逻辑并行效率（包含固定 YARN AM/Executor 启动时间与共享宿主机 I/O 竞争），不作为跨物理机线性加速比。
 
 # 第 5 章实验评估部分
 

@@ -68,7 +68,8 @@ YARN client 模式使用两台逻辑 Worker，每台一个 executor，每个 1 �
 | `genre_controversy.csv` | 56 | 按类型比较评分、争议度和电影数 |
 | `genre_region_stats.csv` | 3,376 | 类型与产区交叉统计 |
 | `genre_stats.csv` | 56 | 类型概览与示例片 |
-| `region_stats.csv` | 502 | 产区概览。未提供映射时 `iso_code` 为空 |
+| `region_stats.csv` | 502 | 产区概览，已通过 `region_iso_codes.csv` 补全 129 个国家/地区 ISO-3 编码（覆盖 99.43% 已知产区影片） |
+| `spark_parallel_runtime.csv` | 3 | 同机单 Worker（54.940s）vs 双 Worker（45.745s，1.201x）全量特征逻辑并行实测与 ALS 耗时 |
 | `user_type_distribution.csv` | 3 | 三类用户画像人数和占比 |
 | `als_model_metrics.csv` | 1 | B2 单模型基线校验记录 |
 | `als_landmine_metrics.csv` | 1 | B2 稳妥用户单模型踩雷率 |
