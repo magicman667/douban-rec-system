@@ -31,9 +31,12 @@ def run():
     assert all(m['controversy_score'] < .5 for m in detail['safe_twins'])
     report['detail'] = {'id': 1291545, 'positive': len(detail['pos_comments']), 'negative': len(detail['neg_comments']), 'twins': len(detail['safe_twins']), 'alert': detail['stream_alert']}
     report['alerts'] = len(service.alerts(6))
-    cat_hits = service.catalog_search('肖申克的救赎')
-    assert cat_hits and any('肖申克' in m['title'] for m in cat_hits)
+    cat_hits, cat_total = service.catalog_search('肖申克的救赎')
+    assert cat_hits and cat_total >= 1 and any('肖申克' in m['title'] for m in cat_hits)
     report['catalog_search_top'] = [m['title'] for m in cat_hits[:3]]
+    hot_cn = service.hot_mainland('🔥 华语新片热榜', limit=5)
+    assert len(hot_cn) == 5
+    report['hot_mainland'] = [m['title'] for m in hot_cn]
 
     app = AppTest.from_file(str(Path(__file__).parent / 'app.py'), default_timeout=180).run()
     assert not app.exception and not app.error

@@ -1,7 +1,8 @@
-"""Read-only adapters for versioned member 1/2/3 handoffs and repo analysis CSVs."""
+"""Read-only adapters for versioned member 1/2/3 handoffs, in-memory catalog search, and repo CSVs."""
 import csv
 from functools import lru_cache
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -49,6 +50,26 @@ def clean_title(title):
     return re.sub(r'\s*-\s*电影$', '', str(title or '').strip())
 
 
+def _to_list(val):
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return []
+    if hasattr(val, 'tolist'):
+        val = val.tolist()
+    if isinstance(val, (list, tuple)):
+        return [str(v).strip() for v in val if v is not None and str(v).strip()]
+    text = str(val).strip()
+    if not text:
+        return []
+    if text.startswith('['):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [str(v).strip() for v in parsed if str(v).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [item.strip() for item in text.split('/') if item.strip()]
+
+
 @lru_cache(maxsize=1)
 def load_movie_meta():
     if not MOVIE_META_CSV.exists():
@@ -61,6 +82,7 @@ def load_movie_meta():
             except (KeyError, TypeError, ValueError):
                 continue
             meta[mid] = {
+                'year': int(row.get('year') or 0),
                 'douban_votes': int(row.get('douban_votes') or 0),
                 'douban_score': float(row.get('douban_score') or 0.0),
                 'directors': str(row.get('directors') or ''),
@@ -117,6 +139,9 @@ def movies_lookup(movie_ids):
     for row in df.to_dict('records'):
         mid = int(row['movie_id'])
         extra = extra_meta.get(mid, {})
+        yr = row.get('year')
+        if (yr is None or (isinstance(yr, float) and math.isnan(yr)) or int(yr or 0) <= 0) and extra.get('year', 0) > 0:
+            row['year'] = int(extra['year'])
         row['douban_votes'] = int(extra.get('douban_votes', 0))
         row['douban_score'] = float(extra.get('douban_score', 0.0))
         row['directors'] = str(extra.get('directors', ''))
@@ -125,71 +150,160 @@ def movies_lookup(movie_ids):
     return result
 
 
-def search_catalog(query_text='', genre=None, risk_filter='全部', min_ratings=20, limit=20):
-    q = str(query_text or '').strip()
-    eff_min = int(min_ratings) if q else max(int(min_ratings), 50)
-    has_meta = MOVIE_META_CSV.exists()
+@lru_cache(maxsize=1)
+def load_catalog_df():
+    df = query(
+        '''SELECT movie_id, title, cover_url, year, main_genre, genres, regions, tags,
+                  rating_count, bayesian_rating, z_genre_score, controversy_score, archetype_label
+           FROM read_parquet(?)''',
+        [parquet('movie_features.parquet')],
+    )
+    df['movie_id'] = df['movie_id'].astype(int)
+    df['title'] = df['title'].fillna('').astype(str)
+    df['clean_title'] = df['title'].map(clean_title)
+    df['cover_url'] = df['cover_url'].fillna('').astype(str)
+    df['main_genre'] = df['main_genre'].fillna('未知').astype(str)
+    df['genres_list'] = df['genres'].map(_to_list)
+    df['regions_list'] = df['regions'].map(_to_list)
+    df['genres_str'] = df['genres_list'].map(lambda xs: ' '.join(xs))
+    df['regions_str'] = df['regions_list'].map(lambda xs: ' '.join(xs))
+    df['tags_str'] = df['tags'].fillna('').astype(str)
 
-    if has_meta:
-        from_clause = (
-            "FROM read_parquet(?) m LEFT JOIN read_csv(?, header=true, "
-            "columns={'movie_id': 'BIGINT', 'douban_votes': 'BIGINT', 'douban_score': 'DOUBLE', "
-            "'directors': 'VARCHAR', 'actors': 'VARCHAR'}) e ON m.movie_id = e.movie_id"
-        )
-        select_extra = (
-            "COALESCE(e.douban_votes, 0) AS douban_votes, "
-            "COALESCE(e.douban_score, 0.0) AS douban_score, "
-            "COALESCE(e.directors, '') AS directors, "
-            "COALESCE(e.actors, '') AS actors"
-        )
-        params = [parquet('movie_features.parquet'), str(MOVIE_META_CSV)]
-    else:
-        from_clause = 'FROM read_parquet(?) m'
-        select_extra = "0 AS douban_votes, 0.0 AS douban_score, '' AS directors, '' AS actors"
-        params = [parquet('movie_features.parquet')]
+    meta = load_movie_meta()
+    meta_years = df['movie_id'].map(lambda m: meta.get(m, {}).get('year', 0))
+    raw_years = pd.to_numeric(df['year'], errors='coerce').fillna(0).astype(int)
+    df['year_int'] = raw_years.where(raw_years > 0, meta_years).astype(int)
+    df['douban_votes'] = df['movie_id'].map(lambda m: meta.get(m, {}).get('douban_votes', 0)).astype(int)
+    df['douban_score'] = df['movie_id'].map(lambda m: meta.get(m, {}).get('douban_score', 0.0)).astype(float)
+    df['directors'] = df['movie_id'].map(lambda m: meta.get(m, {}).get('directors', ''))
+    df['actors'] = df['movie_id'].map(lambda m: meta.get(m, {}).get('actors', ''))
+    df['has_cover'] = df['cover_url'].str.startswith(('http://', 'https://'))
+    df['search_blob'] = (
+        df['clean_title'] + ' ' + df['title'] + ' ' + df['directors'] + ' '
+        + df['actors'] + ' ' + df['genres_str'] + ' ' + df['regions_str'] + ' ' + df['tags_str']
+    ).str.lower()
+    return df
 
-    conditions = ['m.rating_count >= ?']
-    params.append(eff_min)
+
+def _df_to_records(sub_df):
+    records = []
+    for row in sub_df.to_dict('records'):
+        yr = int(row['year_int'])
+        records.append({
+            'movie_id': int(row['movie_id']),
+            'title': row['title'],
+            'cover_url': row['cover_url'],
+            'year': yr if yr > 0 else None,
+            'main_genre': row['main_genre'],
+            'genres': row['genres_list'],
+            'regions': row['regions_list'],
+            'rating_count': int(row['rating_count']),
+            'bayesian_rating': float(row['bayesian_rating']),
+            'z_genre_score': float(row['z_genre_score']),
+            'controversy_score': float(row['controversy_score']),
+            'archetype_label': str(row['archetype_label'] or ''),
+            'douban_votes': int(row['douban_votes']),
+            'douban_score': float(row['douban_score']),
+            'directors': row['directors'],
+            'actors': row['actors'],
+        })
+    return records
+
+
+def search_catalog(
+    query_text='',
+    genre=None,
+    region_filter='全部地区',
+    risk_filter='全部',
+    sort_by='人气最高',
+    min_ratings=0,
+    limit=15,
+):
+    df = load_catalog_df()
+    mask = df['rating_count'] >= int(min_ratings)
+
+    if region_filter == '中国大陆':
+        mask &= df['regions_str'].str.contains('中国大陆', regex=False)
+    elif region_filter == '华语电影':
+        mask &= df['regions_str'].str.contains('中国大陆|中国香港|香港|中国台湾|台湾', regex=True)
+    elif region_filter == '欧美日韩':
+        mask &= df['regions_str'].str.contains('美国|英国|法国|德国|意大利|日本|韩国', regex=True)
+    elif region_filter and region_filter != '全部地区':
+        mask &= df['regions_str'].str.contains(str(region_filter), regex=False)
 
     if genre and genre != '全部题材':
-        conditions.append('(list_contains(m.genres, ?) OR m.main_genre = ?)')
-        params.extend([genre, genre])
+        g = str(genre)
+        mask &= df['genres_str'].str.contains(g, regex=False) | (df['main_genre'] == g)
 
     if risk_filter == '稳妥共识':
-        conditions.append('m.controversy_score < 0.35')
+        mask &= df['controversy_score'] < 0.35
     elif risk_filter == '两极争议':
-        conditions.append('m.controversy_score >= 0.50')
+        mask &= df['controversy_score'] >= 0.50
 
-    exact_expr = '0'
+    q = str(query_text or '').strip()
     if q:
-        like_pat = f'%{q}%'
-        search_fields = [
-            'm.title',
-            "COALESCE(m.tags, '')",
-            "COALESCE(m.storyline, '')",
-            "array_to_string(m.genres, ' ')",
-            "array_to_string(m.regions, ' ')",
-        ]
-        if has_meta:
-            search_fields.extend(["COALESCE(e.directors, '')", "COALESCE(e.actors, '')"])
-        conditions.append('(' + ' OR '.join(f'{field} ILIKE ?' for field in search_fields) + ')')
-        params.extend([like_pat] * len(search_fields))
-        exact_expr = "CASE WHEN lower(regexp_replace(trim(m.title), '\\s*-\\s*电影$', '')) = lower(?) THEN 2 WHEN m.title ILIKE ? THEN 1 ELSE 0 END"
-        params.extend([q, f'{q}%'])
+        for token in q.split():
+            mask &= df['search_blob'].str.contains(token.lower(), regex=False)
 
-    where_sql = ' AND '.join(conditions)
-    order_sql = f'{exact_expr} DESC, douban_votes DESC, m.rating_count DESC, m.bayesian_rating DESC'
-    sql = f'''
-        SELECT m.movie_id, m.title, m.cover_url, m.year, m.main_genre, m.genres, m.regions,
-               m.rating_count, m.bayesian_rating, m.z_genre_score, m.controversy_score,
-               m.archetype_label, m.hist_5bins, m.storyline, {select_extra}
-        {from_clause}
-        WHERE {where_sql}
-        ORDER BY {order_sql}
-        LIMIT ?
-    '''
-    params.append(int(limit))
-    return query(sql, params).to_dict('records')
+    sub = df.loc[mask].copy()
+    if q and len(sub):
+        ql = q.lower()
+        ct_lower = sub['clean_title'].str.lower()
+        sub['_exact'] = 0
+        sub.loc[ct_lower.str.startswith(ql, na=False), '_exact'] = 1
+        sub.loc[ct_lower == ql, '_exact'] = 2
+    else:
+        sub['_exact'] = 0
+
+    if len(sub):
+        if sort_by == '最新热门':
+            recent = sub[sub['year_int'] >= 2012]
+            if len(recent):
+                sub = recent
+            sub = sub.sort_values(['_exact', 'year_int', 'douban_votes', 'rating_count'], ascending=[False, False, False, False])
+        elif sort_by == '口碑最高':
+            reliable = sub[sub['rating_count'] >= 50]
+            if len(reliable):
+                sub = reliable
+            sub = sub.sort_values(['_exact', 'bayesian_rating', 'douban_votes'], ascending=[False, False, False])
+        elif sort_by == '最具争议':
+            reliable = sub[sub['rating_count'] >= 50]
+            if len(reliable):
+                sub = reliable
+            sub = sub.sort_values(['_exact', 'controversy_score', 'douban_votes'], ascending=[False, False, False])
+        else:
+            sub = sub.sort_values(['_exact', 'douban_votes', 'rating_count', 'bayesian_rating'], ascending=[False, False, False, False])
+
+    total = int(len(sub))
+    return _df_to_records(sub.head(int(limit))), total
+
+
+def hot_mainland_movies(mode='🔥 华语新片热榜', limit=5):
+    df = load_catalog_df()
+    base = df[df['regions_str'].str.contains('中国大陆', regex=False) & (df['rating_count'] >= 20)]
+
+    if '稳妥' in mode:
+        sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] < 0.36) & (base['douban_votes'] >= 50000)]
+        if len(sub) < int(limit):
+            sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] < 0.38) & (base['douban_votes'] >= 10000)]
+        sub = sub.sort_values(['bayesian_rating', 'douban_votes'], ascending=[False, False])
+        return _df_to_records(sub.head(int(limit)))
+
+    if '争议' in mode:
+        sub = base[(base['year_int'] >= 2012) & (base['controversy_score'] >= 0.50) & (base['douban_votes'] >= 100000)]
+        sub = sub.sort_values(['douban_votes', 'controversy_score'], ascending=[False, False])
+        return _df_to_records(sub.head(int(limit)))
+
+    # Default: blend newest 2018-2019 blockbusters + recent real-poster Mainland hits
+    recent = base[(base['year_int'] >= 2015) & (base['douban_votes'] >= 150000)]
+    postered = recent[recent['has_cover']].sort_values(['year_int', 'douban_votes'], ascending=[False, False]).head(2)
+    newest = recent[recent['year_int'] >= 2018].sort_values('douban_votes', ascending=False).head(int(limit))
+    picked = pd.concat([postered, newest]).drop_duplicates('movie_id')
+    if len(picked) < int(limit):
+        more = recent.sort_values('douban_votes', ascending=False)
+        picked = pd.concat([picked, more]).drop_duplicates('movie_id')
+    picked = picked.sort_values('douban_votes', ascending=False).head(int(limit))
+    return _df_to_records(picked)
 
 
 def service_benchmark():

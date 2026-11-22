@@ -16,6 +16,7 @@ _REPO_M3 = Path(__file__).resolve().parents[1] / '03_weaviate_stream_eval'
 _RUNTIME_M3 = Path(__file__).parent / 'runtime' / 'member3'
 SOURCE = Path(os.getenv('DOUBAN_SERVICE_SOURCE', str(_REPO_M3 if (_REPO_M3 / 'core.py').exists() else _RUNTIME_M3)))
 LOCK = threading.RLock()
+CHINESE_REGIONS = {'中国大陆', '中国香港', '香港', '中国台湾', '台湾'}
 
 
 @st.cache_resource(show_spinner='正在连接 Weaviate 双向量引擎与推荐服务…')
@@ -65,8 +66,12 @@ def _attach_meta(movies):
     for movie in movies:
         mid = int(movie['movie_id'])
         extra = meta.get(mid, {})
+        yr = movie.get('year')
+        if (yr is None or int(yr or 0) <= 0) and extra.get('year', 0) > 0:
+            yr = int(extra['year'])
         enriched.append({
             **movie,
+            'year': yr,
             'douban_votes': int(movie.get('douban_votes') or extra.get('douban_votes', 0)),
             'douban_score': float(movie.get('douban_score') or extra.get('douban_score', 0.0)),
             'directors': str(movie.get('directors') or extra.get('directors', '')),
@@ -113,18 +118,51 @@ def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False, popularity_we
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14):
+def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14, region_scope='全部地区'):
+    top_pool = 60 if region_scope != '全部地区' else 36
     try:
-        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36, min_ratings=int(min_ratings))
+        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=top_pool, min_ratings=int(min_ratings))
     except TypeError:
-        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36)
+        result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=top_pool)
     raw = result.get('recommendations') or []
     if int(min_ratings) > 0 and len(raw) < 5:
         try:
-            result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=36, min_ratings=0)
+            result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=top_pool, min_ratings=0)
             raw = result.get('recommendations') or []
         except TypeError:
             pass
+
+    if region_scope == '中国大陆':
+        raw = [m for m in raw if '中国大陆' in (m.get('regions') or [])]
+        if len(raw) < 10:
+            seen = {int(m['movie_id']) for m in raw}
+            pad, _ = data.search_catalog(
+                genre=genre,
+                region_filter='中国大陆',
+                sort_by='最新热门',
+                min_ratings=max(20, int(min_ratings)),
+                limit=15,
+            )
+            for m in pad:
+                if int(m['movie_id']) not in seen:
+                    raw.append(m)
+                    seen.add(int(m['movie_id']))
+    elif region_scope == '华语电影':
+        raw = [m for m in raw if bool(set(m.get('regions') or []) & CHINESE_REGIONS)]
+        if len(raw) < 10:
+            seen = {int(m['movie_id']) for m in raw}
+            pad, _ = data.search_catalog(
+                genre=genre,
+                region_filter='华语电影',
+                sort_by='最新热门',
+                min_ratings=max(20, int(min_ratings)),
+                limit=15,
+            )
+            for m in pad:
+                if int(m['movie_id']) not in seen:
+                    raw.append(m)
+                    seen.add(int(m['movie_id']))
+
     movies = _prioritize_posters(
         raw,
         top_k=10,
@@ -154,19 +192,26 @@ def search(query, avoid=True, min_ratings=50, popularity_weight=0.12):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def catalog_search(query_text='', genre=None, risk_filter='全部', min_ratings=20, limit=15):
+def catalog_search(query_text='', genre=None, region_filter='全部地区', risk_filter='全部', sort_by='人气最高', min_ratings=0, limit=15):
     q = str(query_text or '').strip()
-    fetch_limit = int(limit) * 2 if not q else int(limit)
-    rows = data.search_catalog(
+    fetch_limit = int(limit) * 2 if (not q and sort_by == '人气最高') else int(limit)
+    rows, total = data.search_catalog(
         query_text=q,
         genre=genre,
+        region_filter=region_filter,
         risk_filter=risk_filter,
+        sort_by=sort_by,
         min_ratings=int(min_ratings),
         limit=fetch_limit,
     )
-    if not q:
-        return _prioritize_posters(rows, top_k=int(limit), enforce_genre_cap=False, popularity_weight=0.0)
-    return rows[:int(limit)]
+    if not q and sort_by == '人气最高':
+        rows = _prioritize_posters(rows, top_k=int(limit), enforce_genre_cap=False, popularity_weight=0.0)
+    return rows[:int(limit)], total
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hot_mainland(mode='🔥 华语新片热榜', limit=5):
+    return data.hot_mainland_movies(mode=mode, limit=int(limit))
 
 
 @st.cache_data(ttl=120, show_spinner=False)

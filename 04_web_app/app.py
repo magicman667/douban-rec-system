@@ -3,6 +3,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import html
 from io import BytesIO
+import logging
 import urllib.parse
 
 from PIL import Image
@@ -40,7 +41,7 @@ st.markdown('''<style>
 }
 
 .block-container {
-  padding-top: 1.15rem !important;
+  padding-top: 1.1rem !important;
   padding-bottom: 2rem !important;
   padding-left: 1.8rem !important;
   padding-right: 1.8rem !important;
@@ -76,6 +77,23 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
   padding: 4px 10px; border-radius: 999px;
 }
 
+.sec-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 4px 0 8px;
+}
+.sec-title { font-size: 15px; font-weight: 700; color: #f8fafc; letter-spacing: 0.01em; }
+.sec-sub { font-size: 11.5px; color: #94a3b8; }
+.soft-hr { border: 0; border-top: 1px solid rgba(148, 163, 184, 0.12); margin: 16px 0 14px; }
+.summary-strip {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  background: rgba(14, 21, 37, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 13px;
+  margin: 6px 0 12px;
+  font-size: 12px; color: #cbd5e1;
+}
+
 /* Metrics */
 [data-testid="stMetric"] {
   background: linear-gradient(160deg, rgba(20, 30, 51, 0.88), rgba(11, 17, 32, 0.92));
@@ -88,7 +106,7 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
 [data-testid="stMetricValue"] { font-size: 1.48rem !important; font-weight: 700 !important; color: #f8fafc !important; }
 [data-testid="stMetricDelta"] { font-size: 11px !important; }
 
-/* Glass Containers (native st.container(border=True) + HTML cards) */
+/* Glass Containers */
 [data-testid="stVerticalBlockBorderWrapper"] {
   background: linear-gradient(180deg, rgba(16, 24, 42, 0.86), rgba(10, 15, 29, 0.94)) !important;
   border: 1px solid var(--border) !important;
@@ -127,7 +145,7 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
   border: 1px solid rgba(251, 113, 133, 0.35);
   border-radius: 12px;
   padding: 8px 14px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 12px;
 }
 .pulse-dot {
@@ -168,23 +186,60 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
 .poster-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
-.poster-fallback {
+
+/* Criterion / MUBI Editorial Typographic Poster Fallback */
+.poster-editorial {
   width: 100%; height: 100%;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 14px 12px;
-  box-sizing: border-box;
   position: relative;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center;
+  padding: 38px 14px 14px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
-.poster-fallback::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(6,9,19,0.12) 0%, rgba(6,9,19,0.78) 100%);
+.poster-editorial::before {
+  content: ''; position: absolute; inset: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  pointer-events: none;
 }
-.pf-title {
+.poster-editorial::after {
+  content: '✦'; position: absolute; right: 14px; bottom: 26px;
+  font-size: 56px; line-height: 1; color: rgba(255, 255, 255, 0.045);
+  pointer-events: none;
+}
+.pe-kicker {
   position: relative; z-index: 1;
-  font-size: 14px; font-weight: 700; line-height: 1.3; color: #f8fafc;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.20em;
+  color: rgba(251, 191, 36, 0.88); text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.pe-title {
+  position: relative; z-index: 1;
+  font-size: 17px; font-weight: 800; line-height: 1.35; letter-spacing: 0.03em;
+  color: #f8fafc;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.65);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
-.pf-sub { position: relative; z-index: 1; font-size: 10.5px; color: rgba(226,232,240,0.75); margin-top: 4px; }
+.pe-rule {
+  position: relative; z-index: 1;
+  width: 28px; height: 2px; border-radius: 99px;
+  background: linear-gradient(90deg, transparent, #f59e0b, transparent);
+  margin: 10px auto 8px;
+}
+.pe-crew {
+  position: relative; z-index: 1;
+  font-size: 11px; color: rgba(226, 232, 240, 0.82);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 92%;
+}
+.pe-heat {
+  position: relative; z-index: 1;
+  margin-top: 8px;
+  font-size: 10px; font-weight: 600; color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.30);
+  padding: 2px 8px; border-radius: 999px;
+}
 
 .chip-tl {
   position: absolute; top: 8px; left: 8px; z-index: 2;
@@ -281,16 +336,17 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
 </style>''', unsafe_allow_html=True)
 
 GENRE_GRADIENTS = {
-    '科幻': 'linear-gradient(145deg, #0f2a4a 0%, #1e1b4b 60%, #090d1a 100%)',
-    '喜剧': 'linear-gradient(145deg, #451a03 0%, #7c2d12 55%, #0f172a 100%)',
-    '爱情': 'linear-gradient(145deg, #4c0519 0%, #831843 55%, #0f172a 100%)',
-    '动作': 'linear-gradient(145deg, #3b0764 0%, #1e3a8a 55%, #090d1a 100%)',
-    '恐怖': 'linear-gradient(145deg, #450a0a 0%, #1f2937 60%, #030712 100%)',
-    '悬疑': 'linear-gradient(145deg, #0c4a6e 0%, #1e293b 60%, #060913 100%)',
-    '动画': 'linear-gradient(145deg, #064e3b 0%, #1e3a8a 60%, #090d1a 100%)',
-    '纪录片': 'linear-gradient(145deg, #134e4a 0%, #1e293b 60%, #090d1a 100%)',
+    '科幻': 'radial-gradient(circle at 25% 20%, rgba(56,189,248,0.22), transparent 55%), linear-gradient(155deg, #0b223f 0%, #17153b 58%, #070b14 100%)',
+    '喜剧': 'radial-gradient(circle at 75% 22%, rgba(245,158,11,0.24), transparent 55%), linear-gradient(155deg, #3b1905 0%, #5c210f 52%, #090d18 100%)',
+    '爱情': 'radial-gradient(circle at 30% 25%, rgba(251,113,133,0.24), transparent 55%), linear-gradient(155deg, #43081c 0%, #6b143b 55%, #090d18 100%)',
+    '动作': 'radial-gradient(circle at 70% 20%, rgba(167,139,250,0.22), transparent 55%), linear-gradient(155deg, #2d0a4e 0%, #172d6e 55%, #080c16 100%)',
+    '恐怖': 'radial-gradient(circle at 50% 22%, rgba(244,63,94,0.22), transparent 55%), linear-gradient(155deg, #3a0909 0%, #181f2c 58%, #04060b 100%)',
+    '悬疑': 'radial-gradient(circle at 28% 20%, rgba(20,184,166,0.20), transparent 55%), linear-gradient(155deg, #0a3854 0%, #172235 58%, #060913 100%)',
+    '动画': 'radial-gradient(circle at 72% 24%, rgba(16,185,129,0.24), transparent 55%), linear-gradient(155deg, #064234 0%, #1a2f6c 58%, #070b14 100%)',
+    '纪录片': 'radial-gradient(circle at 30% 20%, rgba(45,212,191,0.18), transparent 55%), linear-gradient(155deg, #103e3c 0%, #192438 58%, #070b14 100%)',
+    '剧情': 'radial-gradient(circle at 70% 20%, rgba(245,158,11,0.18), transparent 55%), linear-gradient(155deg, #1b2842 0%, #121a2d 58%, #060913 100%)',
 }
-DEFAULT_GRADIENT = 'linear-gradient(145deg, #1e293b 0%, #0f172a 60%, #060913 100%)'
+DEFAULT_GRADIENT = 'radial-gradient(circle at 70% 20%, rgba(56,189,248,0.16), transparent 55%), linear-gradient(155deg, #1b263b 0%, #0e1525 60%, #060913 100%)'
 
 DOUBAN_HOSTS = ('img1.doubanio.com', 'img2.doubanio.com', 'img9.doubanio.com', 'img3.doubanio.com')
 POSTER_HEADERS = {
@@ -349,23 +405,6 @@ def _prefetch_posters(movies):
     return dict(zip(urls, results))
 
 
-def _poster_html(movie, poster_cache=None):
-    url = _safe_url(movie.get('cover_url'))
-    title = html.escape(data.clean_title(movie.get('title')))
-    genre = str(movie.get('main_genre') or '电影')
-    year = str(movie.get('year') or '')
-    sub = html.escape(' · '.join(p for p in [genre, year] if p))
-    grad = GENRE_GRADIENTS.get(genre, DEFAULT_GRADIENT)
-    data_uri = (poster_cache.get(url) if poster_cache is not None else _fetch_poster_b64(url)) if url else ''
-    if data_uri:
-        return f'<img class="poster-img" src="{data_uri}" alt="{title}">'
-    return (
-        f'<div class="poster-fallback" style="background:{grad};display:flex">'
-        f'<div class="pf-title">{title}</div>'
-        f'<div class="pf-sub">{sub}</div></div>'
-    )
-
-
 def _fmt_votes(votes, rating_count):
     v = int(votes or 0)
     if v >= 10000:
@@ -373,6 +412,33 @@ def _fmt_votes(votes, rating_count):
     if v >= 1000:
         return f'{v:,}人'
     return f'{int(rating_count or 0):,}评'
+
+
+def _poster_html(movie, poster_cache=None):
+    url = _safe_url(movie.get('cover_url'))
+    title = html.escape(data.clean_title(movie.get('title')))
+    genre = str(movie.get('main_genre') or '电影')
+    data_uri = (poster_cache.get(url) if poster_cache is not None else _fetch_poster_b64(url)) if url else ''
+    if data_uri:
+        return f'<img class="poster-img" src="{data_uri}" alt="{title}">'
+
+    grad = GENRE_GRADIENTS.get(genre, DEFAULT_GRADIENT)
+    year = str(movie.get('year') or '').strip()
+    year = year if year and year != 'None' else ''
+    directors = str(movie.get('directors') or '').strip()
+    director = directors.split('/')[0].strip() if directors else ''
+    crew = html.escape(' · '.join(p for p in [year, genre, director] if p) or genre)
+    kicker = html.escape(' · '.join(p for p in [genre, year] if p) or 'CINEPULSE ARCHIVE')
+    heat_txt = _fmt_votes(movie.get('douban_votes', 0), movie.get('rating_count', 0))
+    return (
+        f'<div class="poster-editorial" style="background:{grad}">'
+        f'<div class="pe-kicker">{kicker}</div>'
+        f'<div class="pe-title">{title}</div>'
+        f'<div class="pe-rule"></div>'
+        f'<div class="pe-crew">{crew}</div>'
+        f'<div class="pe-heat">🔥 {heat_txt}</div>'
+        f'</div>'
+    )
 
 
 def _archetype_badge(movie):
@@ -393,7 +459,16 @@ def _cards(movies, context):
     if not movies:
         return
     extras = service.movie_extras_batch([m['movie_id'] for m in movies])
-    merged_list = [{**extras.get(int(m['movie_id']), {}), **m} for m in movies]
+    merged_list = []
+    for m in movies:
+        ex = extras.get(int(m['movie_id']), {})
+        merged = {**ex, **m}
+        merged['year'] = m.get('year') or ex.get('year')
+        merged['douban_votes'] = int(m.get('douban_votes') or ex.get('douban_votes') or 0)
+        merged['directors'] = str(m.get('directors') or ex.get('directors') or '')
+        merged['actors'] = str(m.get('actors') or ex.get('actors') or '')
+        merged_list.append(merged)
+
     poster_cache = _prefetch_posters(merged_list)
     cols_per_row = 5
     for idx, merged in enumerate(merged_list):
@@ -453,11 +528,16 @@ def detail():
             result = service.detail(movie_id)
             extra = service.movie_extra(movie_id)
     except Exception:
+        logging.exception('detail failed for movie_id=%s', movie_id)
         st.warning('电影详情暂时加载失败，请稍后重试。')
         return
 
     movie = {**extra, **result['movie']}
+    movie['year'] = extra.get('year') or movie.get('year')
+    movie['douban_votes'] = extra.get('douban_votes') or 0
+    movie['directors'] = extra.get('directors') or ''
     clean_name = data.clean_title(movie.get('title'))
+
     left, right = st.columns([1.0, 2.2], gap='medium')
     with left:
         st.markdown(
@@ -504,11 +584,9 @@ def detail():
         if len(hist) == 5 and sum(hist):
             st.plotly_chart(charts.star_mini(hist), width='stretch', config={'displayModeBar': False})
 
-    # AI Summary Card
     summary = str(result.get('ai_summary') or '暂无正反方短评摘要。')
     st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{html.escape(summary)}</div>', unsafe_allow_html=True)
 
-    # Side-by-side Positive / Negative Quotes
     pos_col, neg_col = st.columns(2, gap='medium')
     with pos_col:
         st.markdown('**👍 五星好评**')
@@ -525,7 +603,6 @@ def detail():
         for text in neg[:3]:
             st.markdown(f'<div class="quote-neg">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
 
-    # Horizontal 3-column Weaviate Safe Twins
     st.markdown('**🛡️ 同类型零差评平替（Weaviate 向量检索）**')
     twins = result.get('safe_twins') or []
     if not twins:
@@ -589,6 +666,42 @@ def hall():
     personal, catalog, scene = st.tabs(['✨ 为你推荐', '🎬 搜电影', '🔍 一句话情境找片'])
 
     with personal:
+        # ── Homepage Spotlight: Recent Mainland China Blockbusters ──
+        sp1, sp2 = st.columns([2.2, 2.0], gap='small')
+        with sp1:
+            st.markdown(
+                '<div class="sec-bar"><div>'
+                '<span class="sec-title">🇨🇳 中国大陆热门新片</span> '
+                '<span class="sec-sub">· 全网高人气院线代表作</span>'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
+        with sp2:
+            cn_mode = st.segmented_control(
+                '华语榜单',
+                ['🔥 华语新片热榜', '🛡️ 华语稳妥佳作', '⚡ 华语高热争议'],
+                default='🔥 华语新片热榜',
+                label_visibility='collapsed',
+                key='cn_spotlight_mode',
+            ) or '🔥 华语新片热榜'
+
+        try:
+            mainland_movies = service.hot_mainland(mode=cn_mode, limit=5)
+            _cards(mainland_movies, 'cn_hot')
+        except Exception:
+            logging.exception('hot_mainland failed')
+
+        st.markdown('<hr class="soft-hr">', unsafe_allow_html=True)
+
+        # ── Personalized TDC-Rec Dual-Vector Feed ──
+        st.markdown(
+            '<div class="sec-bar"><div>'
+            '<span class="sec-title">✨ 个性化双向量推荐</span> '
+            '<span class="sec-sub">· ALS 50D + BGE 512D 融合重排</span>'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+
         personas = service.personas()
         label_map = {
             '稳妥防雷派': '🛡️ 稳妥防雷',
@@ -605,7 +718,7 @@ def hall():
             '💎 全库挖宝': (0, 0.0, '全库 140,502 无过滤'),
         }
 
-        bar1, bar2, bar3, bar4 = st.columns([1.85, 1.85, 1.15, 0.75], gap='small')
+        bar1, bar2, bar3, bar4, bar5 = st.columns([1.65, 1.65, 1.0, 0.95, 0.65], gap='small')
         with bar1:
             chosen = st.segmented_control('观影口味', choices, default=choices[0], label_visibility='collapsed') or choices[0]
         uid = option_uid[chosen]
@@ -618,8 +731,10 @@ def hall():
             ) or '✨ 主流口碑'
         min_r, pop_w, mode_desc = mode_specs[pop_mode]
         with bar3:
-            genre = st.selectbox('题材', ['全部题材'] + top_genres, label_visibility='collapsed', key='rec_genre_select')
+            rec_region = st.selectbox('推荐地区', ['全部地区', '中国大陆', '华语电影'], label_visibility='collapsed', key='rec_region_select')
         with bar4:
+            genre = st.selectbox('题材', ['全部题材'] + top_genres, label_visibility='collapsed', key='rec_genre_select')
+        with bar5:
             with st.popover('档案 ID', width='stretch'):
                 use_custom = st.toggle('按 ID 查询', value=False)
                 custom_uid = st.number_input('用户 ID', min_value=1, value=int(uid), step=1)
@@ -633,10 +748,12 @@ def hall():
                     None if genre == '全部题材' else genre,
                     min_ratings=min_r,
                     popularity_weight=pop_w,
+                    region_scope=rec_region,
                 )
         except KeyError:
             st.info(f'未找到档案 #{uid}，请切换顶部预设口味。')
         except Exception:
+            logging.exception('recommend failed for uid=%s', uid)
             st.warning('推荐服务繁忙，请稍后重试。')
         else:
             user_info = result['user']
@@ -647,61 +764,97 @@ def hall():
             k1.metric('当前画像', user_info.get('user_type_label', '均衡观影派'), f'档案 #{user_info["user_id"]}')
             k2.metric('争议容忍度 τ', f'{tau:.2f}', '自动压降高分歧' if tau < 0.28 else ('保留两极佳作' if tau > 0.50 else '口碑多样性均衡'))
             k3.metric('偏好题材', top_pref, f'历史 {int(user_info.get("rating_count", 0)):,} 部')
-            k4.metric('检索模式', pop_mode.split()[-1], mode_desc)
+            k4.metric('检索范围', f'{rec_region} · {pop_mode.split()[-1]}', mode_desc)
 
             movies = result.get('recommendations') or []
             if not movies:
-                st.info('该题材下暂无推荐，试试切换题材或选片风格。')
+                st.info('该组合下暂无推荐，试试切换地区或题材。')
             else:
                 _cards(movies, 'rec')
 
     with catalog:
-        quick_queries = ['肖申克的救赎', '霸王别姬', '流浪地球', '无极', '周星驰', '宫崎骏']
-        q_cols = st.columns(len(quick_queries), gap='small')
+        quick_queries = ['流浪地球', '我不是药神', '哪吒之魔童降世', '影', '大鱼海棠', '霸王别姬', '肖申克的救赎', '周星驰']
+        q_cols = st.columns(len(quick_queries) + 1, gap='small')
         for idx, q_text in enumerate(quick_queries):
             with q_cols[idx]:
-                if st.button(f'🎬 {q_text}', key=f'cat_quick_{idx}', width='stretch'):
+                if st.button(q_text, key=f'cat_quick_{idx}', width='stretch'):
                     st.session_state['catalog_query_box'] = q_text
+        with q_cols[-1]:
+            if st.button('重置', key='cat_reset', width='stretch'):
+                st.session_state['catalog_query_box'] = ''
+                st.session_state['cat_region_select'] = '全部地区'
+                st.session_state['cat_genre_select'] = '全部题材'
+                st.session_state['cat_risk_select'] = '全部'
+                st.session_state['cat_sort_select'] = '人气最高'
 
-        with st.form('catalog_search_form', border=False):
-            c1, c2, c3, c4 = st.columns([2.5, 1.1, 1.05, 0.75], gap='small')
-            with c1:
-                cat_query = st.text_input(
-                    '搜电影',
-                    key='catalog_query_box',
-                    max_chars=120,
-                    placeholder='搜片名、导演、主演、国家或标签（如：周星驰、盗梦空间、恐怖）…',
-                    label_visibility='collapsed',
-                )
-            with c2:
-                cat_risk = st.selectbox('口碑筛选', ['全部', '稳妥共识', '两极争议'], label_visibility='collapsed')
-            with c3:
-                cat_genre = st.selectbox('搜电影题材', ['全部题材'] + top_genres, label_visibility='collapsed')
-            with c4:
-                st.form_submit_button('搜索', width='stretch')
+        c1, c2, c3, c4, c5 = st.columns([2.25, 0.95, 0.95, 0.9, 0.95], gap='small')
+        with c1:
+            cat_query = st.text_input(
+                '搜电影',
+                key='catalog_query_box',
+                max_chars=120,
+                placeholder='输入片名、导演、主演、国家或标签（回车即时搜索全库 14 万部电影）…',
+                label_visibility='collapsed',
+            )
+        with c2:
+            cat_region = st.selectbox(
+                '搜电影地区',
+                ['全部地区', '中国大陆', '华语电影', '美国', '日本', '韩国', '欧美日韩'],
+                key='cat_region_select',
+                label_visibility='collapsed',
+            )
+        with c3:
+            cat_genre = st.selectbox(
+                '搜电影题材',
+                ['全部题材'] + top_genres,
+                key='cat_genre_select',
+                label_visibility='collapsed',
+            )
+        with c4:
+            cat_risk = st.selectbox(
+                '口碑筛选',
+                ['全部', '稳妥共识', '两极争议'],
+                key='cat_risk_select',
+                label_visibility='collapsed',
+            )
+        with c5:
+            cat_sort = st.selectbox(
+                '排序方式',
+                ['人气最高', '最新热门', '口碑最高', '最具争议'],
+                key='cat_sort_select',
+                label_visibility='collapsed',
+            )
 
         active_cat_q = str(cat_query or '').strip()
         try:
-            cat_movies = service.catalog_search(
+            cat_movies, total_hits = service.catalog_search(
                 query_text=active_cat_q,
                 genre=None if cat_genre == '全部题材' else cat_genre,
+                region_filter=cat_region,
                 risk_filter=cat_risk,
-                min_ratings=10 if active_cat_q else 50,
+                sort_by=cat_sort,
+                min_ratings=0 if active_cat_q else 20,
                 limit=15,
             )
-        except Exception:
-            cat_movies = []
-            st.warning('片库检索暂时繁忙，请稍后重试。')
-
-        if active_cat_q:
-            st.markdown(f'**「{html.escape(active_cat_q)}」 · 匹配 {len(cat_movies)} 部电影**')
-        else:
-            st.markdown('**🔥 全库高人气口碑榜 · Top 15**')
+        except Exception as exc:
+            logging.exception('catalog_search failed')
+            cat_movies, total_hits = [], 0
+            st.error(f'检索异常：{exc}')
 
         if cat_movies:
+            avg_r = sum(float(m.get('bayesian_rating', 0)) for m in cat_movies) / len(cat_movies)
+            avg_c = sum(float(m.get('controversy_score', 0)) for m in cat_movies) / len(cat_movies)
+            head_txt = f'🔍 关键词「<b>{html.escape(active_cat_q)}</b>」命中 <b>{total_hits:,}</b> 部' if active_cat_q else f'🔥 <b>{html.escape(cat_region)} · {html.escape(cat_sort)}</b>（共 {total_hits:,} 部符合条件）'
+            st.markdown(
+                f'<div class="summary-strip">'
+                f'<span>{head_txt}</span>'
+                f'<span>展示 Top {len(cat_movies)} · 平均口碑 <b>★ {avg_r:.2f}</b> · 平均分歧 <b>{avg_c:.2f}</b></span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             _cards(cat_movies, 'cat')
         else:
-            st.info('未找到匹配电影，试试更换关键词、题材或放宽口碑筛选。')
+            st.info('未找到匹配电影，试试点击上方「重置」或换个关键词。')
 
     with scene:
         presets = ['雨天独自看的温暖科幻片', '零差评轻松喜剧', '节奏紧凑的高分悬疑', '华语高口碑剧情佳作']
@@ -734,6 +887,7 @@ def hall():
                     found = service.search(active_query, avoid, min_ratings=50, popularity_weight=0.12)
                 st.session_state['scene_result'] = (active_query, avoid, found)
             except Exception:
+                logging.exception('scene search failed')
                 st.session_state.pop('scene_result', None)
                 st.warning('检索服务繁忙，请稍后重试。')
         elif submit:
@@ -772,6 +926,5 @@ with st.sidebar:
 try:
     {'发现电影': hall, '口碑全景': panorama, '观影发现': overview}[page]()
 except Exception:
-    import logging
     logging.exception('page failed: %s', page)
     st.warning('页面加载异常，请刷新重试。')
