@@ -1,7 +1,10 @@
 """知影 · CinePulse — Cinema-grade dark UI for TDC-Rec movie discovery & big-data analytics."""
+import base64
+from concurrent.futures import ThreadPoolExecutor
 import html
 import urllib.parse
 
+import requests
 import streamlit as st
 
 import charts
@@ -285,32 +288,69 @@ GENRE_GRADIENTS = {
 DEFAULT_GRADIENT = 'linear-gradient(145deg, #1e293b 0%, #0f172a 60%, #060913 100%)'
 
 
+DOUBAN_HOSTS = ('img1.doubanio.com', 'img2.doubanio.com', 'img9.doubanio.com', 'img3.doubanio.com')
+POSTER_HEADERS = {
+    'Referer': 'https://movie.douban.com/',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+}
+
+
 def _safe_url(url):
     value = str(url or '').strip()
     return value if urllib.parse.urlparse(value).scheme in ('http', 'https') else ''
 
 
-def _poster_html(movie):
+def _candidate_urls(url):
+    parsed = urllib.parse.urlparse(url)
+    candidates = [url]
+    if parsed.netloc.endswith('.doubanio.com'):
+        for host in DOUBAN_HOSTS:
+            if host != parsed.netloc:
+                candidates.append(parsed._replace(netloc=host).geturl())
+    return candidates
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _fetch_poster_b64(url):
+    clean = _safe_url(url)
+    if not clean:
+        return ''
+    for candidate in _candidate_urls(clean):
+        try:
+            resp = requests.get(candidate, timeout=(2.0, 2.5), headers=POSTER_HEADERS)
+            if resp.status_code == 200 and resp.content and resp.headers.get('content-type', '').startswith('image/'):
+                if len(resp.content) <= 2_500_000:
+                    mime = resp.headers.get('content-type', 'image/jpeg').split(';')[0]
+                    return f'data:{mime};base64,' + base64.b64encode(resp.content).decode('ascii')
+        except requests.RequestException:
+            continue
+    return ''
+
+
+def _prefetch_posters(movies):
+    urls = list({str(m.get('cover_url') or '').strip() for m in movies if _safe_url(m.get('cover_url'))})
+    if not urls:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(10, len(urls))) as pool:
+        results = list(pool.map(_fetch_poster_b64, urls))
+    return dict(zip(urls, results))
+
+
+def _poster_html(movie, poster_cache=None):
     url = _safe_url(movie.get('cover_url'))
     title = html.escape(str(movie.get('title') or ''))
     genre = str(movie.get('main_genre') or '电影')
     year = str(movie.get('year') or '')
     sub = html.escape(' · '.join(p for p in [genre, year] if p))
     grad = GENRE_GRADIENTS.get(genre, DEFAULT_GRADIENT)
-    fallback = (
-        f'<div class="poster-fallback" style="background:{grad};display:{{disp}}">'
+    data_uri = (poster_cache.get(url) if poster_cache is not None else _fetch_poster_b64(url)) if url else ''
+    if data_uri:
+        return f'<img class="poster-img" src="{data_uri}" alt="{title}">'
+    return (
+        f'<div class="poster-fallback" style="background:{grad};display:flex">'
         f'<div class="pf-title">{title}</div>'
         f'<div class="pf-sub">{sub}</div></div>'
     )
-    if url:
-        esc_url = html.escape(url, quote=True)
-        return (
-            f'<img class="poster-img" referrerpolicy="no-referrer" loading="lazy" '
-            f'src="{esc_url}" alt="{title}" '
-            f'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
-            + fallback.format(disp='none')
-        )
-    return fallback.format(disp='flex')
 
 
 def _archetype_badge(movie):
@@ -331,12 +371,12 @@ def _cards(movies, context):
     if not movies:
         return
     extras = service.movie_extras_batch([m['movie_id'] for m in movies])
+    merged_list = [{**extras.get(int(m['movie_id']), {}), **m} for m in movies]
+    poster_cache = _prefetch_posters(merged_list)
     cols_per_row = 5
-    for idx, movie in enumerate(movies):
+    for idx, merged in enumerate(merged_list):
         if idx % cols_per_row == 0:
             cols = st.columns(cols_per_row, gap='small')
-        extra = extras.get(int(movie['movie_id']), {})
-        merged = {**extra, **movie}
         score = float(merged.get('bayesian_rating', 0))
         c_val = float(merged.get('controversy_score', 0))
         z_val = float(merged.get('z_genre_score', 0))
@@ -353,7 +393,7 @@ def _cards(movies, context):
             st.markdown(
                 f'<div class="film-card">'
                 f'<div class="poster-wrap">'
-                f'{_poster_html(merged)}'
+                f'{_poster_html(merged, poster_cache)}'
                 f'<span class="chip-tl {badge_cls}">{badge_text}</span>'
                 f'<span class="chip-tr">★ {score:.2f}</span>'
                 f'</div>'
@@ -368,8 +408,8 @@ def _cards(movies, context):
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
-            if st.button('排雷详情', key=f'{context}_{movie["movie_id"]}_{idx}', width='stretch'):
-                st.session_state['detail_movie'] = int(movie['movie_id'])
+            if st.button('排雷详情', key=f'{context}_{merged["movie_id"]}_{idx}', width='stretch'):
+                st.session_state['detail_movie'] = int(merged['movie_id'])
                 detail()
 
 

@@ -54,14 +54,46 @@ def call(name, **kwargs):
         raise
 
 
+def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False):
+    with_cover = [m for m in movies if str(m.get('cover_url') or '').startswith(('http://', 'https://'))]
+    without_cover = [m for m in movies if not str(m.get('cover_url') or '').startswith(('http://', 'https://'))]
+    ordered = with_cover + without_cover
+    if not enforce_genre_cap:
+        return ordered[:top_k]
+    picked, counts = [], {}
+    for movie in ordered:
+        g = movie.get('main_genre') or '未知'
+        if counts.get(g, 0) >= 4:
+            continue
+        picked.append(movie)
+        counts[g] = counts.get(g, 0) + 1
+        if len(picked) >= top_k:
+            break
+    if len(picked) < top_k:
+        seen = {m['movie_id'] for m in picked}
+        for movie in ordered:
+            if movie['movie_id'] not in seen:
+                picked.append(movie)
+                if len(picked) >= top_k:
+                    break
+    return picked
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def recommend(uid, genre=None):
-    return call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=10)
+    result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=60)
+    movies = _prioritize_posters(
+        result.get('recommendations') or [],
+        top_k=10,
+        enforce_genre_cap=(genre is None),
+    )
+    return {**result, 'recommendations': movies, 'count': len(movies)}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def search(query, avoid=True):
-    return call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=10)
+    movies = call('search_by_scene', query_text=query, avoid_controversy=avoid, top_k=50)
+    return _prioritize_posters(movies or [], top_k=10, enforce_genre_cap=False)
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -100,10 +132,18 @@ def alerts(limit=6):
 
 @st.cache_data(ttl=300)
 def personas():
-    return data.query('''SELECT user_type_label, min(user_id) AS user_id FROM
-        read_parquet(?) p SEMI JOIN read_parquet(?) e USING(user_id)
-        GROUP BY user_type_label ORDER BY user_type_label''',
-        [data.parquet('user_profiles.parquet'), data.parquet('eval_users')]).to_dict('records')
+    return data.query('''
+        SELECT user_type_label, user_id FROM (
+            SELECT p.user_type_label, p.user_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY p.user_type_label
+                       ORDER BY p.rating_count DESC, p.user_id ASC
+                   ) AS rn
+            FROM read_parquet(?) p
+            SEMI JOIN read_parquet(?) e USING(user_id)
+        ) WHERE rn = 1
+        ORDER BY user_type_label
+    ''', [data.parquet('user_profiles.parquet'), data.parquet('eval_users')]).to_dict('records')
 
 
 @st.cache_data(ttl=300, show_spinner=False)
