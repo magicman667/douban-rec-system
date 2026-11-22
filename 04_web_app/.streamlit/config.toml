@@ -5,3 +5,11 @@ maxCachedMessageAge = 10
 [server]
 enableWebsocketCompression = false
 maxMessageSize = 400
+
+[theme]
+base = "dark"
+primaryColor = "#f59e0b"
+backgroundColor = "#060913"
+secondaryBackgroundColor = "#0e1525"
+textColor = "#f1f5f9"
+font = "sans serif"

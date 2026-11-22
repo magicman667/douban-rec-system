@@ -1,61 +1,494 @@
-"""Display existing aggregates; reshaping/filtering never changes upstream metrics."""
+"""Cinema-grade Plotly visual components built strictly from upstream CSVs."""
+import math
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-COLORS = ['#fb7185', '#fbbf24', '#94a3b8', '#38bdf8', '#34d399']
+STAR_COLORS = ['#F43F5E', '#FB923C', '#94A3B8', '#38BDF8', '#10B981']
+MODEL_COLORS = {
+    'B1': '#475569',
+    'B2': '#38BDF8',
+    'B3': '#A78BFA',
+    'Ours': '#F59E0B',
+}
+MODEL_LABELS = {
+    'B1': 'B1 热门高分',
+    'B2': 'B2 Spark ALS',
+    'B3': 'B3 纯向量检索',
+    'Ours': 'Ours (TDC-Rec)',
+}
+GRID_COLOR = 'rgba(148, 163, 184, 0.10)'
 
 
-def style(fig, title, subtitle=''):
-    fig.update_layout(template='plotly_dark', title=dict(text=title + ('<br><sup>' + subtitle + '</sup>' if subtitle else '')), paper_bgcolor='#101827', plot_bgcolor='#101827', margin=dict(l=35, r=30, t=85, b=55), height=460, font=dict(family='sans-serif', size=13), legend_title_text='')
+def style(fig, title='', height=380, margin=None):
+    fig.update_layout(
+        template='plotly_dark',
+        title=dict(
+            text=title,
+            font=dict(size=15, color='#F8FAFC', family='Inter, "PingFang SC", "Microsoft YaHei", sans-serif'),
+            x=0.01,
+            xanchor='left',
+            y=0.96,
+        ) if title else None,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=height,
+        margin=margin or dict(l=18, r=18, t=48 if title else 16, b=28),
+        font=dict(family='Inter, "PingFang SC", "Microsoft YaHei", sans-serif', size=12, color='#CBD5E1'),
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='right',
+            x=1.0,
+            title_text='',
+            bgcolor='rgba(0,0,0,0)',
+            font=dict(size=11, color='#94A3B8'),
+        ),
+        hoverlabel=dict(
+            bgcolor='#0F172A',
+            bordercolor='#334155',
+            font=dict(size=12, color='#F8FAFC'),
+        ),
+    )
+    fig.update_xaxes(showgrid=False, linecolor='rgba(148,163,184,0.18)', tickfont=dict(color='#94A3B8'))
+    fig.update_yaxes(gridcolor=GRID_COLOR, zerolinecolor='rgba(148,163,184,0.18)', tickfont=dict(color='#94A3B8'))
+    return fig
+
+
+def aggregate_world_regions(region_frame):
+    df = region_frame.copy()
+    df['iso_code'] = df['iso_code'].fillna('').astype(str).str.strip()
+    df = df[df['iso_code'].str.len() == 3].copy()
+    df['w_rating'] = df['avg_bayesian_rating'] * df['movie_count']
+    df['w_contro'] = df['avg_controversy'] * df['movie_count']
+    agg = (
+        df.sort_values('movie_count', ascending=False)
+        .groupby('iso_code', as_index=False)
+        .agg(
+            region=('name', 'first'),
+            movie_count=('movie_count', 'sum'),
+            w_rating=('w_rating', 'sum'),
+            w_contro=('w_contro', 'sum'),
+            top_consensus_movie=('top_consensus_movie', 'first'),
+            top_polarizing_movie=('top_polarizing_movie', 'first'),
+        )
+    )
+    agg['avg_bayesian_rating'] = (agg['w_rating'] / agg['movie_count']).round(3)
+    agg['avg_controversy'] = (agg['w_contro'] / agg['movie_count']).round(4)
+    agg['log_count'] = agg['movie_count'].apply(lambda v: math.log10(max(1, int(v))))
+    return agg.sort_values('movie_count', ascending=False).reset_index(drop=True)
+
+
+def world_map(region_frame, metric='avg_controversy', projection='natural earth'):
+    agg = aggregate_world_regions(region_frame)
+    configs = {
+        'avg_controversy': ('avg_controversy', '评价分歧 C', ['#0C2D48', '#14B8A6', '#F59E0B', '#F43F5E'], (0.04, 0.18)),
+        'avg_bayesian_rating': ('avg_bayesian_rating', '贝叶斯口碑', ['#1E293B', '#38BDF8', '#10B981', '#F59E0B'], (3.1, 3.75)),
+        'movie_count': ('log_count', '影片规模 (log₁₀)', ['#0F172A', '#1D4ED8', '#38BDF8', '#F59E0B'], (0.0, 4.65)),
+    }
+    col, bar_title, scale, crange = configs.get(metric, configs['avg_controversy'])
+
+    fig = px.choropleth(
+        agg,
+        locations='iso_code',
+        color=col,
+        hover_name='region',
+        custom_data=['movie_count', 'avg_bayesian_rating', 'avg_controversy', 'top_consensus_movie', 'top_polarizing_movie'],
+        color_continuous_scale=scale,
+        range_color=crange,
+        projection=projection,
+    )
+    fig.update_traces(
+        marker_line_color='rgba(15, 23, 42, 0.75)',
+        marker_line_width=0.6,
+        hovertemplate=(
+            '<b>%{hovertext}</b><br>'
+            '收录影片：%{customdata[0]:,} 部<br>'
+            '平均口碑：%{customdata[1]:.2f} / 5<br>'
+            '评价分歧：%{customdata[2]:.3f}<br>'
+            '共识代表：%{customdata[3]}<br>'
+            '争议代表：%{customdata[4]}<extra></extra>'
+        ),
+    )
+    fig.update_geos(
+        bgcolor='rgba(0,0,0,0)',
+        showocean=True,
+        oceancolor='#070D1A',
+        showland=True,
+        landcolor='#131C2E',
+        showcountries=True,
+        countrycolor='#26354F',
+        showcoastlines=True,
+        coastlinecolor='#1E293B',
+        showframe=False,
+        lataxis_range=[-58, 82] if projection == 'natural earth' else None,
+    )
+    fig.update_layout(
+        template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=440,
+        margin=dict(l=0, r=0, t=6, b=0),
+        coloraxis_colorbar=dict(
+            title=dict(text=bar_title, font=dict(size=11, color='#94A3B8')),
+            thickness=12,
+            len=0.68,
+            x=0.98,
+            bgcolor='rgba(14,21,37,0.75)',
+            tickfont=dict(size=10, color='#94A3B8'),
+        ),
+        hoverlabel=dict(bgcolor='#0F172A', bordercolor='#F59E0B', font=dict(size=12, color='#F8FAFC')),
+    )
     return fig
 
 
 def rating(frame):
-    return style(px.bar(frame, x='rating', y='count', color='rating', color_discrete_sequence=COLORS, text='count', labels={'rating': '评分（星）', 'count': '评分数量（条）'}), '大家更常打几星？', '全部已收录评分 · 1 星最低，5 星最高')
+    df = frame.copy()
+    df['star'] = df['rating'].astype(str) + '★'
+    df['label'] = df['ratio'].map(lambda r: f'{r * 100:.1f}%')
+    fig = px.bar(
+        df,
+        x='star',
+        y='count',
+        color='star',
+        color_discrete_sequence=STAR_COLORS,
+        text='label',
+        labels={'star': '', 'count': '评分数'},
+    )
+    fig.update_traces(
+        textposition='outside',
+        textfont=dict(size=11, color='#E2E8F0'),
+        marker_line_width=0,
+        hovertemplate='<b>%{x}</b><br>评分数：%{y:,}<br>占比：%{text}<extra></extra>',
+    )
+    fig.update_layout(showlegend=False)
+    return style(fig, '全库 1～5 星评分分布', height=340)
+
+
+def users(frame):
+    palette = {'均衡观影派': '#38BDF8', '稳妥防雷派': '#10B981', '猎奇探索派': '#F59E0B'}
+    total = int(frame['user_count'].sum())
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=frame['user_type_label'],
+                values=frame['user_count'],
+                hole=0.62,
+                marker=dict(
+                    colors=[palette.get(lbl, '#94A3B8') for lbl in frame['user_type_label']],
+                    line=dict(color='#060913', width=2.5),
+                ),
+                textinfo='label+percent',
+                textfont=dict(size=12, color='#F8FAFC'),
+                hovertemplate='<b>%{label}</b><br>人数：%{value:,}<br>占比：%{percent}<extra></extra>',
+            )
+        ]
+    )
+    fig.add_annotation(
+        text=f'<b>{total:,}</b><br><span style="font-size:11px;color:#94A3B8">观众画像</span>',
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=17, color='#F8FAFC'),
+    )
+    fig.update_layout(showlegend=False)
+    return style(fig, '三类观影偏好占比', height=340, margin=dict(l=12, r=12, t=46, b=12))
 
 
 def longtail(frame):
     data = frame.sort_values('rating_count', ascending=False).reset_index(drop=True)
-    data['按评价数量排序的位置'] = data.index + 1
-    # Points are sampled only for rendering; every value is an original per-film count.
-    step = max(1, len(data) // 5000)
-    data = pd.concat([data.iloc[::step], data.tail(1)]).drop_duplicates('按评价数量排序的位置')
-    return style(px.scatter(data, x='按评价数量排序的位置', y='rating_count', log_x=True, log_y=True, hover_name='title', labels={'rating_count': '评价数量（条）'}), '哪些电影被更多人讨论？', '从评价最多排到最少 · 坐标按倍数变化，便于观察热门与冷门')
+    data = data[data['rating_count'] > 0].copy()
+    data['rank'] = data.index + 1
+    step = max(1, len(data) // 1800)
+    sampled = pd.concat([data.iloc[:80], data.iloc[80::step], data.tail(1)]).drop_duplicates('rank')
+    fig = go.Figure(
+        go.Scatter(
+            x=sampled['rank'],
+            y=sampled['rating_count'],
+            mode='lines',
+            line=dict(color='#38BDF8', width=2.4),
+            fill='tozeroy',
+            fillcolor='rgba(56, 189, 248, 0.14)',
+            text=sampled['title'],
+            hovertemplate='<b>%{text}</b><br>热度排名：#%{x:,}<br>评分数：%{y:,}<extra></extra>',
+        )
+    )
+    fig.update_xaxes(type='log', title_text='电影热度序位 (log)')
+    fig.update_yaxes(type='log', title_text='获评次数 (log)')
+    return style(fig, '电影获评次数长尾分布', height=340)
 
 
-def runtime(frame):
-    data = frame.copy()
-    data['轮次'] = data['run_id'].astype(str)
-    return style(px.bar(data, x='engine', y='runtime_sec', color='轮次', barmode='group', hover_data=['input_records'], labels={'engine': '计算引擎', 'runtime_sec': '运行耗时（秒）'}), 'WordCount 实测耗时', '同一 ECS · 相同输入 1,250,471 条 · 展示三次原始运行记录')
-
-
-def genre_rating(frame):
-    data = frame.melt(id_vars='genre', var_name='星级', value_name='评分数量')
-    data['星级'] = data['星级'].str.replace('rating_', '') + ' 星'
-    return style(px.bar(data, x='genre', y='评分数量', color='星级', color_discrete_sequence=COLORS, labels={'genre': '类型'}), '不同题材，观众怎么打分？', '基于历史评分 · 一部电影可能属于多个题材')
+def genre_rating(frame, mode='ratio'):
+    df = frame.copy()
+    star_cols = ['rating_1', 'rating_2', 'rating_3', 'rating_4', 'rating_5']
+    if mode == 'ratio':
+        totals = df[star_cols].sum(axis=1).replace(0, 1)
+        for col in star_cols:
+            df[col] = df[col] / totals * 100.0
+    melted = df.melt(id_vars='genre', value_vars=star_cols, var_name='星级', value_name='值')
+    melted['星级'] = melted['星级'].str.replace('rating_', '') + '★'
+    y_title = '占比 (%)' if mode == 'ratio' else '评分数'
+    fig = px.bar(
+        melted,
+        x='genre',
+        y='值',
+        color='星级',
+        color_discrete_sequence=STAR_COLORS,
+        labels={'genre': '', '值': y_title},
+    )
+    fig.update_traces(
+        marker_line_width=0,
+        hovertemplate='<b>%{x} · %{fullData.name}</b><br>' + ('占比：%{y:.1f}%' if mode == 'ratio' else '评分：%{y:,}') + '<extra></extra>',
+    )
+    if mode == 'ratio':
+        fig.update_yaxes(range=[0, 100])
+    return style(fig, '各题材 1～5 星结构' + ('（占比）' if mode == 'ratio' else '（总量）'), height=390)
 
 
 def bubble(frame):
-    return style(px.scatter(frame, x='avg_bayesian_rating', y='avg_controversy', size='movie_count', hover_name='genre', size_max=65, color='avg_controversy', color_continuous_scale='Tealrose', hover_data=['movie_count'], labels={'genre': '题材', 'avg_bayesian_rating': '参考口碑（1～5 星）', 'avg_controversy': '评价分歧（越高越不一致）', 'movie_count': '电影数'}), '高口碑，也会有不同声音吗？', '圆越大，收录的电影越多 · 这是题材整体表现，具体电影各有不同')
+    df = frame.copy()
+    med_x = float(df['avg_bayesian_rating'].median())
+    med_y = float(df['avg_controversy'].median())
+    fig = px.scatter(
+        df,
+        x='avg_bayesian_rating',
+        y='avg_controversy',
+        size='movie_count',
+        text='genre',
+        hover_name='genre',
+        size_max=52,
+        color='avg_controversy',
+        color_continuous_scale=['#14B8A6', '#38BDF8', '#F59E0B', '#F43F5E'],
+        custom_data=['movie_count'],
+        labels={'avg_bayesian_rating': '贝叶斯口碑 (1～5)', 'avg_controversy': '平均分歧 C'},
+    )
+    fig.update_traces(
+        textposition='top center',
+        textfont=dict(size=11, color='#E2E8F0'),
+        marker=dict(line=dict(width=1.2, color='rgba(255,255,255,0.35)'), opacity=0.88),
+        hovertemplate='<b>%{hovertext}</b><br>影片数：%{customdata[0]:,}<br>平均口碑：%{x:.2f}<br>评价分歧：%{y:.3f}<extra></extra>',
+    )
+    fig.add_vline(x=med_x, line_dash='dot', line_color='rgba(148,163,184,0.35)')
+    fig.add_hline(y=med_y, line_dash='dot', line_color='rgba(148,163,184,0.35)')
+    fig.update_coloraxes(showscale=False)
+    return style(fig, '题材口碑 × 分歧四象限', height=390)
 
 
 def heatmap(frame, minimum=20):
+    values = frame.pivot(index='genre', columns='region', values='avg_controversy')
+    counts = frame.pivot(index='genre', columns='region', values='movie_count').reindex_like(values)
+    masked = values.mask(counts < minimum)
+    valid = masked.stack()
+    zmin = float(valid.quantile(0.05)) if len(valid) else 0.0
+    zmax = float(valid.quantile(0.95)) if len(valid) else 0.3
+    if zmax <= zmin:
+        zmin, zmax = 0.0, max(0.25, zmax + 0.05)
+
+    text_vals = masked.map(lambda v: f'{v:.2f}' if pd.notna(v) else '')
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=masked.to_numpy(),
+            x=list(masked.columns),
+            y=list(masked.index),
+            text=text_vals.to_numpy(),
+            texttemplate='%{text}',
+            textfont=dict(size=10, color='#F8FAFC'),
+            customdata=counts.fillna(0).to_numpy(),
+            colorscale=[[0.0, '#0C2438'], [0.35, '#0F766E'], [0.7, '#F59E0B'], [1.0, '#F43F5E']],
+            zmin=zmin,
+            zmax=zmax,
+            hoverongaps=False,
+            hovertemplate='<b>%{y} · %{x}</b><br>评价分歧：%{z:.3f}<br>影片数：%{customdata:.0f}<extra></extra>',
+            colorbar=dict(title='分歧 C', thickness=11, tickfont=dict(size=10, color='#94A3B8')),
+        )
+    )
+    return style(fig, '产区 × 题材分歧矩阵', height=410, margin=dict(l=20, r=18, t=46, b=36))
+
+
+def model_comparison(model_df):
+    order = ['B1', 'B2', 'B3', 'Ours']
+    df = model_df.set_index('model').reindex([m for m in order if m in set(model_df['model'])]).reset_index()
+    # Display normalized uplift & clear dual-scale via clean grouped metrics (NDCG*1000, Recall*1000, Coverage*100)
+    rows = []
+    for _, r in df.iterrows():
+        m = r['model']
+        rows.append({'模型': MODEL_LABELS.get(m, m), 'model_key': m, '指标': 'NDCG@10 (‰)', '值': r['ndcg_10'] * 1000.0, 'raw': f"{r['ndcg_10']:.5f}"})
+        rows.append({'模型': MODEL_LABELS.get(m, m), 'model_key': m, '指标': 'Recall@10 (‰)', '值': r['recall_10'] * 1000.0, 'raw': f"{r['recall_10']:.5f}"})
+    plot_df = pd.DataFrame(rows)
+    fig = px.bar(
+        plot_df,
+        x='指标',
+        y='值',
+        color='模型',
+        barmode='group',
+        text=plot_df['值'].map(lambda v: f'{v:.2f}‰'),
+        custom_data=['raw'],
+        color_discrete_map={MODEL_LABELS[k]: v for k, v in MODEL_COLORS.items()},
+        labels={'指标': '', '值': '全库 14万选10 (‰)'},
+    )
+    fig.update_traces(
+        textposition='outside',
+        textfont=dict(size=10, color='#E2E8F0'),
+        hovertemplate='<b>%{fullData.name}</b><br>%{x}：%{y:.3f}‰ (原始 %{customdata[0]})<extra></extra>',
+    )
+    return style(fig, '四模型排序精度对比（Full-Ranking）', height=340)
+
+
+def coverage_and_landmine(model_df, landmine_df):
+    order = ['B1', 'B2', 'B3', 'Ours']
+    m = model_df.set_index('model').reindex([k for k in order if k in set(model_df['model'])]).reset_index()
+    l = landmine_df.set_index('model').reindex([k for k in order if k in set(landmine_df['model'])]).reset_index()
+    labels = [MODEL_LABELS.get(k, k) for k in m['model']]
+    colors = [MODEL_COLORS.get(k, '#64748B') for k in m['model']]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            name='长尾覆盖率 (%)',
+            x=labels,
+            y=m['coverage_10'] * 100.0,
+            marker_color=colors,
+            text=(m['coverage_10'] * 100.0).map(lambda v: f'{v:.1f}%'),
+            textposition='outside',
+            textfont=dict(size=11, color='#F8FAFC'),
+            hovertemplate='<b>%{x}</b><br>全库覆盖率：%{y:.2f}%<extra></extra>',
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            name='稳妥用户踩雷率 (‰)',
+            x=labels,
+            y=l['landmine_10'] * 1000.0,
+            yaxis='y2',
+            mode='lines+markers+text',
+            line=dict(color='#FB7185', width=2.5),
+            marker=dict(size=9, color='#FB7185', line=dict(color='#060913', width=1.5)),
+            text=(l['landmine_10'] * 1000.0).map(lambda v: f'{v:.2f}‰'),
+            textposition='top center',
+            textfont=dict(size=10, color='#FDA4AF'),
+            hovertemplate='<b>%{x}</b><br>稳妥踩雷率：%{y:.3f}‰<extra></extra>',
+        )
+    )
+    fig.update_layout(
+        yaxis=dict(title='覆盖率 (%)', gridcolor=GRID_COLOR),
+        yaxis2=dict(title='踩雷率 (‰)', overlaying='y', side='right', showgrid=False, rangemode='tozero', tickfont=dict(color='#FDA4AF')),
+    )
+    return style(fig, '长尾覆盖率 ↑ 与稳妥防踩雷 ↓', height=340, margin=dict(l=20, r=42, t=48, b=28))
+
+
+def rerank_flow(trace_df, movie_titles):
+    df = trace_df.sort_values('rank_after').head(12).copy()
+    fig = go.Figure()
+    for _, row in df.iterrows():
+        mid = int(row['movie_id'])
+        title = str(movie_titles.get(mid, {}).get('title') or f'#{mid}')[:12]
+        rb, ra = int(row['rank_before']), int(row['rank_after'])
+        delta = rb - ra
+        color = '#10B981' if delta > 0 else ('#F43F5E' if delta < 0 else '#64748B')
+        width = 2.8 if abs(delta) >= 2 else 1.6
+        fig.add_trace(
+            go.Scatter(
+                x=['重排前 (RRF)', '重排后 (TDC-Rec)'],
+                y=[rb, ra],
+                mode='lines+markers+text',
+                line=dict(color=color, width=width),
+                marker=dict(size=7, color=color),
+                text=[f'#{rb}', f'#{ra} {title}'],
+                textposition=['middle left', 'middle right'],
+                textfont=dict(size=10, color='#E2E8F0'),
+                showlegend=False,
+                hovertemplate=f'<b>{title}</b><br>位次：#{rb} → #{ra}<br>分歧 C：{row["controversy_score"]:.3f}<extra></extra>',
+            )
+        )
+    fig.update_yaxes(autorange='reversed', title_text='排名位次', dtick=5)
+    fig.update_xaxes(range=[-0.28, 1.65])
+    return style(fig, 'TDC-Rec 非对称风险重排位次变化', height=340, margin=dict(l=32, r=18, t=48, b=24))
+
+
+def arch_benchmark(wc_df, parallel_df, bench_dict):
+    wc_med = wc_df.groupby('engine', as_index=False)['runtime_sec'].median()
+    rows = []
+    for _, r in wc_med.iterrows():
+        name = 'MapReduce WordCount' if r['engine'] == 'mapreduce' else 'Spark WordCount'
+        rows.append({'任务': name, '耗时 (秒)': float(r['runtime_sec']), '类别': 'WordCount 对照'})
+    for _, r in parallel_df.iterrows():
+        if r['stage'] == 'feature_engineering':
+            lbl = f"YARN 特征 ({int(r['workers'])} Worker)"
+            rows.append({'任务': lbl, '耗时 (秒)': float(r['runtime_sec']), '类别': '逻辑并行实测'})
+    df = pd.DataFrame(rows)
+    fig1 = px.bar(
+        df,
+        x='耗时 (秒)',
+        y='任务',
+        orientation='h',
+        color='类别',
+        text=df['耗时 (秒)'].map(lambda v: f'{v:.1f}s'),
+        color_discrete_map={'WordCount 对照': '#38BDF8', '逻辑并行实测': '#F59E0B'},
+        labels={'任务': '', '耗时 (秒)': '端到端耗时 (s)'},
+    )
+    fig1.update_traces(textposition='outside', textfont=dict(size=11, color='#F8FAFC'))
+    style(fig1, '离线批计算与 YARN 并行实测', height=300, margin=dict(l=18, r=40, t=46, b=24))
+
+    lat_rows = [
+        {'接口': '双向量推荐', 'P50 (ms)': bench_dict['recommendations']['p50_ms'], 'P95 (ms)': bench_dict['recommendations']['p95_ms']},
+        {'接口': '语义情境搜片', 'P50 (ms)': bench_dict['scene_search']['p50_ms'], 'P95 (ms)': bench_dict['scene_search']['p95_ms']},
+        {'接口': '排雷与平替', 'P50 (ms)': bench_dict['detail_and_twins']['p50_ms'], 'P95 (ms)': bench_dict['detail_and_twins']['p95_ms']},
+    ]
+    lat_df = pd.DataFrame(lat_rows).melt(id_vars='接口', var_name='分位', value_name='延迟 (ms)')
+    fig2 = px.bar(
+        lat_df,
+        x='接口',
+        y='延迟 (ms)',
+        color='分位',
+        barmode='group',
+        text=lat_df['延迟 (ms)'].map(lambda v: f'{v:.1f}ms'),
+        color_discrete_map={'P50 (ms)': '#10B981', 'P95 (ms)': '#F59E0B'},
+        labels={'接口': '', '延迟 (ms)': '在线响应 (ms)'},
+    )
+    fig2.update_traces(textposition='outside', textfont=dict(size=11, color='#F8FAFC'))
+    style(fig2, 'Weaviate + MongoDB 毫秒级在线延迟', height=300)
+    return fig1, fig2
+
+
+def star_mini(hist):
+    fig = go.Figure(
+        go.Bar(
+            x=['1★', '2★', '3★', '4★', '5★'],
+            y=hist,
+            marker_color=STAR_COLORS,
+            text=[f'{int(v):,}' for v in hist],
+            textposition='outside',
+            textfont=dict(size=10, color='#CBD5E1'),
+            hovertemplate='%{x}：%{y:,} 人<extra></extra>',
+        )
+    )
+    fig.update_layout(showlegend=False)
+    return style(fig, '1～5 星口碑波形', height=240, margin=dict(l=12, r=12, t=36, b=18))
+
+
+# Keep backwards-compatible aliases for any external imports
+def runtime(frame):
     data = frame.copy()
-    values = data.pivot(index='genre', columns='region', values='avg_controversy')
-    counts = data.pivot(index='genre', columns='region', values='movie_count').reindex_like(values)
-    fig = px.imshow(values.mask(counts < minimum), aspect='auto', color_continuous_scale='Tealrose', zmin=0, zmax=1, labels={'x': '产区', 'y': '类型', 'color': '观众看法的分歧'})
-    fig.update_traces(customdata=counts.to_numpy(), hovertemplate='类型：%{y}<br>产区：%{x}<br>评价分歧：%{z:.4f}<br>电影数：%{customdata}<extra></extra>')
-    return style(fig, '不同地区的同类电影，口碑有什么不同？', f'颜色越深，看法越不一致 · 少于 {minimum} 部电影或暂无记录的组合留空')
-
-
-def users(frame):
-    return style(px.bar(frame, x='user_type_label', y='user_count', color='user_type_label', hover_data=['ratio'], text='user_count', labels={'user_type_label': '观影口味', 'user_count': '观众人数（人）'}), '大家喜欢怎样的观影体验？', '基于 600,344 位历史观众的观影记录')
+    data['轮次'] = data['run_id'].astype(str)
+    return style(px.bar(data, x='engine', y='runtime_sec', color='轮次', barmode='group'), 'WordCount 实测耗时', height=320)
 
 
 def metrics(frame):
-    data = frame.melt(id_vars='model', var_name='指标', value_name='指标值')
-    return style(px.bar(data, x='指标', y='指标值', color='model', barmode='group', text_auto='.6f'), 'ALS 基线离线评测', 'test · Top-10 · 185,149 名评测用户 · B1/B3/Ours 尚未交付')
+    return model_comparison(frame)
 
 
 def landmine(frame):
-    return style(px.bar(frame, x='model', y='landmine_10', text_auto='.6f', hover_data=['conservative_user_count'], labels={'model': '推荐模型', 'landmine_10': 'Landmine@10（比例，越低越好）'}), '稳妥用户踩雷率', 'test · τ < 0.28 · 28,077 人 · 高争议阈值 C ≥ 0.50 · 当前仅 B2')
+    order = ['B1', 'B2', 'B3', 'Ours']
+    df = frame.set_index('model').reindex([k for k in order if k in set(frame['model'])]).reset_index()
+    fig = px.bar(
+        df,
+        x=df['model'].map(lambda k: MODEL_LABELS.get(k, k)),
+        y=df['landmine_10'] * 1000.0,
+        color=df['model'].map(lambda k: MODEL_LABELS.get(k, k)),
+        text=(df['landmine_10'] * 1000.0).map(lambda v: f'{v:.2f}‰'),
+        color_discrete_map={MODEL_LABELS[k]: v for k, v in MODEL_COLORS.items()},
+        labels={'x': '', 'y': 'Landmine@10 (‰)'},
+    )
+    fig.update_layout(showlegend=False)
+    return style(fig, '稳妥用户踩雷率对比', height=320)

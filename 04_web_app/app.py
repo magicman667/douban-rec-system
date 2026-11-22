@@ -1,207 +1,624 @@
+"""知影 · CinePulse — Cinema-grade dark UI for TDC-Rec movie discovery & big-data analytics."""
 import html
 import urllib.parse
-from io import BytesIO
 
-import plotly.express as px
-import requests
-from PIL import Image
 import streamlit as st
 
+import charts
 import data_access as data
 import service_access as service
 from analysis_dashboard import overview, panorama
 
-st.set_page_config(page_title='知影 · 电影口碑与推荐', page_icon='🎬', layout='wide')
+st.set_page_config(page_title='知影 · CinePulse', page_icon='🎬', layout='wide', initial_sidebar_state='expanded')
+
 st.markdown('''<style>
-.stApp {background:#0b1120;color:#e2e8f0}
-[data-testid="stSidebar"] {background:#101827}
-h1,h2,h3 {letter-spacing:.02em;color:#f1f5f9!important}
-[data-testid="stMetric"] {background:#152238;padding:18px;border-radius:12px}
-[data-testid="stMetricValue"] {font-size:1.6rem!important;white-space:normal!important}
-.film {border:1px solid #24334c;border-radius:14px;padding:14px;background:#101827;min-height:350px}
-.poster {height:215px;width:100%;object-fit:contain;background:#172033;border-radius:8px}
-.badge {font-size:12px;color:#67e8f9;margin:12px 0}
-[data-testid="stToolbar"] {visibility:hidden}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #060913;
+  --surface: #0e1525;
+  --surface-2: #141e33;
+  --border: rgba(148, 163, 184, 0.14);
+  --border-hi: rgba(245, 158, 11, 0.45);
+  --gold: #f59e0b;
+  --cyan: #38bdf8;
+  --emerald: #10b981;
+  --rose: #fb7185;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+}
+
+.stApp {
+  background: radial-gradient(ellipse 80% 38% at 50% -10%, rgba(245, 158, 11, 0.08), transparent 65%),
+              radial-gradient(ellipse 60% 30% at 85% 0%, rgba(56, 189, 248, 0.06), transparent 60%),
+              var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.block-container {
+  padding-top: 1.15rem !important;
+  padding-bottom: 2rem !important;
+  padding-left: 1.8rem !important;
+  padding-right: 1.8rem !important;
+  max-width: 1480px;
+}
+
+[data-testid="stHeader"] { background: rgba(6, 9, 19, 0.65); backdrop-filter: blur(10px); }
+[data-testid="stToolbar"] { visibility: hidden; }
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #0b1120 0%, #070b15 100%);
+  border-right: 1px solid var(--border);
+}
+
+h1 { font-size: 1.75rem !important; font-weight: 700 !important; letter-spacing: -0.01em; margin: 0 !important; color: #f8fafc !important; }
+h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing: 0.01em; }
+
+/* Header & Tech Pills */
+.page-head {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 14px; flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.eyebrow {
+  display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em;
+  color: var(--gold); text-transform: uppercase; margin-bottom: 3px;
+}
+.tech-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tech-pill {
+  font-size: 11px; font-weight: 500; color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 4px 10px; border-radius: 999px;
+}
+
+/* Metrics */
+[data-testid="stMetric"] {
+  background: linear-gradient(160deg, rgba(20, 30, 51, 0.88), rgba(11, 17, 32, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 13px 16px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+[data-testid="stMetricLabel"] { font-size: 11.5px !important; color: var(--muted) !important; letter-spacing: 0.03em; }
+[data-testid="stMetricValue"] { font-size: 1.48rem !important; font-weight: 700 !important; color: #f8fafc !important; }
+[data-testid="stMetricDelta"] { font-size: 11px !important; }
+
+/* Glass Containers (native st.container(border=True) + HTML cards) */
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: linear-gradient(180deg, rgba(16, 24, 42, 0.86), rgba(10, 15, 29, 0.94)) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.30);
+}
+.glass-card {
+  background: linear-gradient(180deg, rgba(16, 24, 42, 0.85), rgba(10, 15, 29, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.30);
+}
+.rank-card { height: 468px; overflow-y: auto; padding: 14px 15px; margin-bottom: 0; }
+.card-kicker {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--gold);
+  text-transform: uppercase; margin-bottom: 10px;
+}
+.rank-row { padding: 7px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.08); }
+.rank-row:last-child { border-bottom: none; }
+.rank-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.rank-idx { font-family: monospace; font-size: 11px; color: var(--gold); font-weight: 700; width: 20px; }
+.rank-name { font-weight: 600; color: #f1f5f9; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-meta { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+.rank-sub { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-left: 28px; }
+.mini-bar { width: 52px; height: 4px; background: rgba(148,163,184,0.16); border-radius: 99px; overflow: hidden; flex-shrink: 0; }
+.mini-bar > div { height: 100%; border-radius: 99px; }
+.rank-gem { font-size: 10.5px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Live Stream Alert Banner */
+.alert-strip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: linear-gradient(90deg, rgba(244, 63, 94, 0.14), rgba(15, 23, 42, 0.85) 55%);
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  border-radius: 12px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #fb7185;
+  box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.7);
+  animation: pulse 1.8s infinite; flex-shrink: 0;
+}
+.pulse-green { background: #10b981; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.65); }
+  70% { box-shadow: 0 0 0 8px rgba(251, 113, 133, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0); }
+}
+.alert-tag { color: #fda4af; font-weight: 700; letter-spacing: 0.04em; }
+
+/* Cinema 5-Column Poster Card */
+.film-card {
+  position: relative;
+  background: linear-gradient(180deg, #111a2e 0%, #0b1120 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  margin-bottom: 6px;
+}
+.film-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-hi);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(245, 158, 11, 0.18);
+}
+.poster-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 2.78;
+  background: #0f172a;
+  overflow: hidden;
+}
+.poster-img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.poster-fallback {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 14px 12px;
+  box-sizing: border-box;
+  position: relative;
+}
+.poster-fallback::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(6,9,19,0.12) 0%, rgba(6,9,19,0.78) 100%);
+}
+.pf-title {
+  position: relative; z-index: 1;
+  font-size: 14px; font-weight: 700; line-height: 1.3; color: #f8fafc;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pf-sub { position: relative; z-index: 1; font-size: 10.5px; color: rgba(226,232,240,0.75); margin-top: 4px; }
+
+.chip-tl {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 999px;
+  backdrop-filter: blur(8px);
+}
+.chip-safe { background: rgba(16, 185, 129, 0.88); color: #022c22; }
+.chip-warn { background: rgba(244, 63, 94, 0.90); color: #fff1f2; }
+.chip-gem { background: rgba(56, 189, 248, 0.90); color: #082f49; }
+.chip-mid { background: rgba(245, 158, 11, 0.90); color: #1c1917; }
+
+.chip-tr {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 8px;
+  background: rgba(6, 9, 19, 0.80); color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.film-body { padding: 10px 11px 11px; }
+.film-title {
+  font-size: 13px; font-weight: 600; color: #f8fafc;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+.film-meta {
+  font-size: 11px; color: #94a3b8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 7px;
+}
+.meter-row { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #94a3b8; }
+.meter-track { flex: 1; height: 4px; border-radius: 99px; background: rgba(148,163,184,0.16); overflow: hidden; }
+.meter-fill { height: 100%; border-radius: 99px; }
+
+/* Dialog Quotes & AI Card */
+.ai-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.10), rgba(56, 189, 248, 0.08));
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 12px;
+  padding: 12px 15px;
+  margin: 8px 0 12px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #f1f5f9;
+}
+.quote-pos {
+  background: rgba(16, 185, 129, 0.07);
+  border-left: 3px solid #10b981;
+  padding: 8px 11px; border-radius: 6px; margin-bottom: 7px; font-size: 12.5px; color: #e2e8f0;
+}
+.quote-neg {
+  background: rgba(244, 63, 94, 0.08);
+  border-left: 3px solid #f43f5e;
+  padding: 8px 11px; border-radius: 6px; margin-bottom: 7px; font-size: 12.5px; color: #e2e8f0;
+}
+
+/* Sidebar Telemetry */
+.brand-box { padding: 4px 0 10px; }
+.brand-title { font-size: 1.45rem; font-weight: 800; color: #f8fafc; letter-spacing: 0.02em; }
+.brand-sub { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; color: var(--gold); margin-top: 2px; }
+.engine-box {
+  background: rgba(14, 21, 37, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-size: 11.5px;
+  margin-top: 12px;
+}
+.engine-head { display: flex; align-items: center; gap: 7px; font-weight: 700; color: #e2e8f0; margin-bottom: 8px; font-size: 11px; letter-spacing: 0.05em; }
+.engine-item { display: flex; justify-content: space-between; padding: 4px 0; color: #94a3b8; border-top: 1px solid rgba(148,163,184,0.08); }
+.engine-item b { color: #e2e8f0; font-weight: 600; }
+
+/* Button Polish */
+.stButton > button {
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 0.36rem 0.65rem !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  background: rgba(20, 30, 51, 0.78) !important;
+  color: #e2e8f0 !important;
+  transition: all 0.18s ease !important;
+}
+.stButton > button:hover {
+  border-color: var(--gold) !important;
+  color: #fef3c7 !important;
+  background: rgba(245, 158, 11, 0.14) !important;
+}
 </style>''', unsafe_allow_html=True)
 
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def poster_bytes(url):
-    value = str(url or '')
-    if urllib.parse.urlparse(value).scheme not in ('https', 'http'):
-        return None
-    try:
-        with requests.get(value, timeout=(2, 2), stream=True, headers={'Referer': 'https://movie.douban.com/'}) as response:
-            response.raise_for_status()
-            body = bytearray()
-            for chunk in response.iter_content(65536):
-                body.extend(chunk)
-                if len(body) > 2_000_000:
-                    return None
-            with Image.open(BytesIO(body)) as image:
-                image.verify()
-            return bytes(body)
-    except (requests.RequestException, OSError, ValueError):
-        return None
+GENRE_GRADIENTS = {
+    '科幻': 'linear-gradient(145deg, #0f2a4a 0%, #1e1b4b 60%, #090d1a 100%)',
+    '喜剧': 'linear-gradient(145deg, #451a03 0%, #7c2d12 55%, #0f172a 100%)',
+    '爱情': 'linear-gradient(145deg, #4c0519 0%, #831843 55%, #0f172a 100%)',
+    '动作': 'linear-gradient(145deg, #3b0764 0%, #1e3a8a 55%, #090d1a 100%)',
+    '恐怖': 'linear-gradient(145deg, #450a0a 0%, #1f2937 60%, #030712 100%)',
+    '悬疑': 'linear-gradient(145deg, #0c4a6e 0%, #1e293b 60%, #060913 100%)',
+    '动画': 'linear-gradient(145deg, #064e3b 0%, #1e3a8a 60%, #090d1a 100%)',
+    '纪录片': 'linear-gradient(145deg, #134e4a 0%, #1e293b 60%, #090d1a 100%)',
+}
+DEFAULT_GRADIENT = 'linear-gradient(145deg, #1e293b 0%, #0f172a 60%, #060913 100%)'
 
 
-def poster(url):
-    import base64
-    content = poster_bytes(url)
-    if content:
-        value = base64.b64encode(content).decode('ascii')
-        return f'<img class="poster" src="data:image/jpeg;base64,{value}" alt="电影海报">'
-    return '<div class="poster" style="display:grid;place-items:center;color:#94a3b8">暂无海报</div>'
+def _safe_url(url):
+    value = str(url or '').strip()
+    return value if urllib.parse.urlparse(value).scheme in ('http', 'https') else ''
 
 
-def reception(movie):
-    count = movie.get('rating_count')
-    if count is not None and int(count) < 20:
-        return '评价还不多，值得再了解一下'
-    return '观众评价较一致' if float(movie.get('controversy_score', 0)) < .5 else '评价两极，建议先看看大家怎么说'
+def _poster_html(movie):
+    url = _safe_url(movie.get('cover_url'))
+    title = html.escape(str(movie.get('title') or ''))
+    genre = str(movie.get('main_genre') or '电影')
+    year = str(movie.get('year') or '')
+    sub = html.escape(' · '.join(p for p in [genre, year] if p))
+    grad = GENRE_GRADIENTS.get(genre, DEFAULT_GRADIENT)
+    fallback = (
+        f'<div class="poster-fallback" style="background:{grad};display:{{disp}}">'
+        f'<div class="pf-title">{title}</div>'
+        f'<div class="pf-sub">{sub}</div></div>'
+    )
+    if url:
+        esc_url = html.escape(url, quote=True)
+        return (
+            f'<img class="poster-img" referrerpolicy="no-referrer" loading="lazy" '
+            f'src="{esc_url}" alt="{title}" '
+            f'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+            + fallback.format(disp='none')
+        )
+    return fallback.format(disp='flex')
 
 
-def cards(movies, context):
-    for position, movie in enumerate(movies):
-        extra = service.movie_extra(movie['movie_id'])
-        movie = {**movie, 'rating_count': int(extra.get('rating_count', 0))}
-        if position % 3 == 0:
-            columns = st.columns(3)
-        with columns[position % 3]:
-            title = html.escape(str(movie['title']))
-            genre = html.escape(' / '.join(movie.get('genres') or []))
-            score = float(movie.get('bayesian_rating', 0))
-            count = movie['rating_count']
-            st.markdown(f'<div class="film">{poster(movie.get("cover_url"))}<div class="badge">{html.escape(reception(movie))}</div><b>{title}</b><p>{genre}</p><p>参考口碑 {score:.1f} / 5 · {count:,} 条历史评价</p></div>', unsafe_allow_html=True)
-            if st.button('了解这部电影', key=f'{context}_{movie["movie_id"]}_{position}', width='stretch'):
+def _archetype_badge(movie):
+    c = float(movie.get('controversy_score', 0))
+    label = str(movie.get('archetype_label') or '')
+    if '争议' in label or c >= 0.50:
+        return ('⚡ 两极争议', 'chip-warn')
+    if '避雷' in label:
+        return ('⚠️ 避雷预警', 'chip-warn')
+    if '宝藏' in label:
+        return ('💎 冷门宝藏', 'chip-gem')
+    if '稳妥' in label or c < 0.28:
+        return ('🛡️ 稳妥共识', 'chip-safe')
+    return ('✦ 口碑均衡', 'chip-mid')
+
+
+def _cards(movies, context):
+    if not movies:
+        return
+    extras = service.movie_extras_batch([m['movie_id'] for m in movies])
+    cols_per_row = 5
+    for idx, movie in enumerate(movies):
+        if idx % cols_per_row == 0:
+            cols = st.columns(cols_per_row, gap='small')
+        extra = extras.get(int(movie['movie_id']), {})
+        merged = {**extra, **movie}
+        score = float(merged.get('bayesian_rating', 0))
+        c_val = float(merged.get('controversy_score', 0))
+        z_val = float(merged.get('z_genre_score', 0))
+        count = int(merged.get('rating_count', 0))
+        title = html.escape(str(merged.get('title') or ''))
+        genres_list = merged.get('genres') or ([merged.get('main_genre')] if merged.get('main_genre') else [])
+        meta_line = html.escape(' / '.join(str(g) for g in list(genres_list)[:2]) + (f' · {count:,}评' if count else ''))
+        badge_text, badge_cls = _archetype_badge(merged)
+        c_pct = min(100, max(6, int(c_val * 100)))
+        c_color = '#10b981' if c_val < 0.28 else ('#f59e0b' if c_val < 0.50 else '#f43f5e')
+        z_str = f'Z {z_val:+.2f}'
+
+        with cols[idx % cols_per_row]:
+            st.markdown(
+                f'<div class="film-card">'
+                f'<div class="poster-wrap">'
+                f'{_poster_html(merged)}'
+                f'<span class="chip-tl {badge_cls}">{badge_text}</span>'
+                f'<span class="chip-tr">★ {score:.2f}</span>'
+                f'</div>'
+                f'<div class="film-body">'
+                f'<div class="film-title" title="{title}">{title}</div>'
+                f'<div class="film-meta">{meta_line}</div>'
+                f'<div class="meter-row">'
+                f'<span>分歧 {c_val:.2f}</span>'
+                f'<div class="meter-track"><div class="meter-fill" style="width:{c_pct}%;background:{c_color}"></div></div>'
+                f'<span>{z_str}</span>'
+                f'</div>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button('排雷详情', key=f'{context}_{movie["movie_id"]}_{idx}', width='stretch'):
                 st.session_state['detail_movie'] = int(movie['movie_id'])
                 detail()
 
 
-@st.dialog('先了解，再决定', width='large')
+@st.dialog('AI 口碑排雷 · 同类平替', width='large')
 def detail():
     movie_id = st.session_state['detail_movie']
     try:
-        with st.spinner('正在整理这部电影的口碑…'):
+        with st.spinner('加载详情与平替…'):
             result = service.detail(movie_id)
             extra = service.movie_extra(movie_id)
     except Exception:
-        st.warning('这部电影的详情暂时没能加载，请稍后再试。')
+        st.warning('电影详情暂时加载失败，请稍后重试。')
         return
-    movie = result['movie']
-    st.subheader(movie['title'])
-    st.caption(' · '.join([str(movie.get('year') or '年份暂无'), ' / '.join(movie.get('genres') or []), ' / '.join(movie.get('regions') or [])]))
-    st.write(extra.get('storyline') or '暂时没有剧情简介。')
-    st.caption('参考口碑结合已有评分与同类电影口碑，按 5 星展示，供选片参考。')
-    st.write(reception({**movie, 'rating_count': extra.get('rating_count', 0)}))
-    if result.get('stream_alert'):
-        st.warning('近期口碑提醒：' + (result.get('recent_drop_msg') or '近期差评有所增加，建议先看看观众反馈。'))
-    hist = list(extra.get('hist_5bins', []))
-    if len(hist) == 5 and sum(hist):
-        st.plotly_chart(px.bar(x=[1, 2, 3, 4, 5], y=hist, labels={'x': '观众打了几星', 'y': '评价数量（条）'}, title='大家的评分', template='plotly_dark'), width='stretch')
-        st.caption(f'基于 {int(extra.get("rating_count", 0)):,} 条历史评分。评价少时，请结合短评判断。')
-    st.subheader('口碑看点')
-    summary = result.get('ai_summary') or '还没有足够的短评可以整理。'
-    for original, friendly in [('暂无可用的正反方短评。', '暂时还没有足够的观众短评。'), ('正方主要观点', '喜欢它的人说'), ('反方主要观点', '不喜欢它的人说'), ('正方样本不足', '喜欢这部电影的短评还不多'), ('反方样本不足', '不喜欢这部电影的短评还不多')]:
-        summary = summary.replace(original, friendly)
-    st.write(summary)
-    st.caption('依据已收录短评整理，供参考。不同观众的感受可能不同。')
-    left, right = st.columns(2)
-    for col, title, name in [(left, '他们喜欢的地方', 'pos_comments'), (right, '他们在意的问题', 'neg_comments')]:
-        with col:
-            st.markdown(f'**{title}**')
-            comments = result.get(name) or []
-            if not comments:
-                st.caption('暂未收录相关短评。')
-            for comment in comments:
-                st.write('“' + str(comment) + '”')
-    st.subheader('想看类似的？再看看这几部')
-    st.caption('题材相近，观众评价相对一致；每个人的喜好不同，也可以先看详情。')
+
+    movie = {**extra, **result['movie']}
+    left, right = st.columns([1.0, 2.2], gap='medium')
+    with left:
+        st.markdown(
+            f'<div class="film-card"><div class="poster-wrap">{_poster_html(movie)}</div></div>',
+            unsafe_allow_html=True,
+        )
+        genres = ' / '.join(movie.get('genres') or [])
+        regions = ' / '.join(movie.get('regions') or [])
+        st.caption(f'{movie.get("year") or "年份未知"} · {genres} · {regions}')
+        st.markdown(
+            '<div class="tech-row">'
+            '<span class="tech-pill">Spark 画像</span>'
+            '<span class="tech-pill">MongoDB 短评</span>'
+            '<span class="tech-pill">Weaviate 平替</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    with right:
+        st.subheader(movie['title'])
+        if result.get('stream_alert'):
+            st.error('⚡ Spark Streaming 实时预警：' + (result.get('recent_drop_msg') or '近期一星差评激增'))
+        m1, m2, m3 = st.columns(3)
+        m1.metric('贝叶斯口碑', f'{float(movie.get("bayesian_rating", 0)):.2f} / 5')
+        m2.metric('同类相对分 Z', f'{float(movie.get("z_genre_score", 0)):+.2f}')
+        m3.metric('耦合分歧 C', f'{float(movie.get("controversy_score", 0)):.3f}')
+
+        storyline = str(extra.get('storyline') or '').strip()
+        if storyline:
+            st.caption(storyline[:180] + ('…' if len(storyline) > 180 else ''))
+
+        hist = list(extra.get('hist_5bins', []))
+        if len(hist) == 5 and sum(hist):
+            st.plotly_chart(charts.star_mini(hist), width='stretch', config={'displayModeBar': False})
+
+    # AI Summary Card
+    summary = str(result.get('ai_summary') or '暂无正反方短评摘要。')
+    st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{html.escape(summary)}</div>', unsafe_allow_html=True)
+
+    # Side-by-side Positive / Negative Quotes
+    pos_col, neg_col = st.columns(2, gap='medium')
+    with pos_col:
+        st.markdown('**👍 五星好评**')
+        pos = result.get('pos_comments') or []
+        if not pos:
+            st.caption('暂无五星短评')
+        for text in pos[:3]:
+            st.markdown(f'<div class="quote-pos">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
+    with neg_col:
+        st.markdown('**👎 一星差评**')
+        neg = result.get('neg_comments') or []
+        if not neg:
+            st.caption('暂无一星短评')
+        for text in neg[:3]:
+            st.markdown(f'<div class="quote-neg">“{html.escape(str(text)[:140])}”</div>', unsafe_allow_html=True)
+
+    # Horizontal 3-column Weaviate Safe Twins
+    st.markdown('**🛡️ 同类型零差评平替（Weaviate 向量检索）**')
     twins = result.get('safe_twins') or []
     if not twins:
-        st.caption('暂时没有合适的相似推荐。')
-    for twin in twins:
-        st.markdown(f'**{twin["title"]}** · 参考口碑 {twin["bayesian_rating"]:.1f} / 5')
-        if st.button('看看这部', key=f'twin_{movie_id}_{twin["movie_id"]}'):
-            st.session_state['detail_movie'] = int(twin['movie_id'])
-            st.rerun(scope='fragment')
+        st.caption('暂无低分歧平替推荐')
+    else:
+        t_cols = st.columns(len(twins), gap='small')
+        for idx, twin in enumerate(twins):
+            with t_cols[idx]:
+                st.markdown(
+                    f'<div class="glass-card" style="padding:10px 12px;margin-bottom:6px">'
+                    f'<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{html.escape(str(twin["title"]))}</div>'
+                    f'<div style="font-size:11px;color:#94a3b8;margin-top:3px">★ {float(twin["bayesian_rating"]):.2f} · 分歧 {float(twin["controversy_score"]):.2f} · 相似度 {float(twin.get("similarity_score", 0)):.2f}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button('切到这部', key=f'twin_{movie_id}_{twin["movie_id"]}_{idx}', width='stretch'):
+                    st.session_state['detail_movie'] = int(twin['movie_id'])
+                    st.rerun(scope='fragment')
+
+
+def _render_alert_bar():
+    active = service.alerts(limit=3)
+    if not active:
+        return
+    st.markdown(
+        '<div class="alert-strip">'
+        '<span class="pulse-dot"></span>'
+        '<span class="alert-tag">SPARK STREAMING 实时口碑熔断预警</span>'
+        '<span style="color:#94a3b8">MongoDB 滑动窗口捕获 1★ 差评激增 · 点击直达排雷：</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    a_cols = st.columns(len(active), gap='small')
+    for idx, item in enumerate(active):
+        short_msg = item['recent_drop_msg'].split('收到')[-1].strip() if '收到' in item['recent_drop_msg'] else '1★激增'
+        with a_cols[idx]:
+            if st.button(f'⚡ 《{item["title"]}》 · {short_msg}', key=f'alert_{item["movie_id"]}', width='stretch'):
+                st.session_state['detail_movie'] = int(item['movie_id'])
+                detail()
 
 
 def hall():
-    st.caption('知影 · 把选片交给好奇心')
-    st.title('今晚，想看点什么？')
-    st.write('找一部合口味的电影，也听听喜欢它和不喜欢它的人怎么说。')
-    personal, scene = st.tabs(['为你推荐', '一句话找电影'])
+    st.markdown(
+        '<div class="page-head">'
+        '<div><span class="eyebrow">CINEPULSE · TDC-REC DUAL-VECTOR ENGINE</span><h1>发现电影</h1></div>'
+        '<div class="tech-row">'
+        '<span class="tech-pill">Weaviate 512D+50D</span>'
+        '<span class="tech-pill">RRF + 非对称风险重排</span>'
+        '<span class="tech-pill">P95 44.7ms</span>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    _render_alert_bar()
+
+    personal, scene = st.tabs(['✨ 为你推荐', '🔍 一句话情境找片'])
+
     with personal:
         personas = service.personas()
-        names = {'稳妥防雷派': '安心看 · 更喜欢口碑一致的电影', '均衡观影派': '随心看 · 熟悉题材与新鲜尝试都喜欢', '猎奇探索派': '大胆看 · 愿意尝试有争议的作品'}
-        options = {names.get(p['user_type_label'], p['user_type_label']): p['user_id'] for p in personas}
-        chosen = st.selectbox('先体验一种观影口味', list(options))
-        uid = options[chosen]
-        st.caption('这是历史观众的观影口味体验，不是你的个人账户。')
-        with st.expander('使用自己的观影档案'):
-            custom = st.toggle('我已有观影档案编号')
-            custom_uid = st.number_input('观影档案编号', min_value=1, value=int(uid), step=1)
-        if custom:
+        label_map = {
+            '稳妥防雷派': '🛡️ 稳妥防雷',
+            '均衡观影派': '⚖️ 均衡观影',
+            '猎奇探索派': '🔥 猎奇探索',
+        }
+        ordered_labels = ['🛡️ 稳妥防雷', '⚖️ 均衡观影', '🔥 猎奇探索']
+        option_uid = {label_map.get(p['user_type_label'], p['user_type_label']): int(p['user_id']) for p in personas}
+        choices = [lbl for lbl in ordered_labels if lbl in option_uid] or list(option_uid.keys())
+
+        genres_df = data.read_csv('genre_controversy')
+        top_genres = genres_df[genres_df['movie_count'] >= 50].sort_values('movie_count', ascending=False)['genre'].tolist()
+
+        bar1, bar2, bar3 = st.columns([2.2, 1.3, 0.85], gap='small')
+        with bar1:
+            chosen = st.segmented_control('观影口味', choices, default=choices[0], label_visibility='collapsed') or choices[0]
+        uid = option_uid[chosen]
+        with bar2:
+            genre = st.selectbox('题材', ['全部题材'] + top_genres, label_visibility='collapsed')
+        with bar3:
+            with st.popover('档案 ID', width='stretch'):
+                use_custom = st.toggle('按 ID 查询', value=False)
+                custom_uid = st.number_input('用户 ID', min_value=1, value=int(uid), step=1)
+        if use_custom:
             uid = int(custom_uid)
-        genres = data.read_csv('genre_controversy').sort_values('movie_count', ascending=False)['genre'].tolist()
-        genre = st.selectbox('今天想看哪种题材？', ['不限题材'] + genres)
+
         try:
-            with st.spinner('正在挑选适合你的电影…'):
-                result = service.recommend(uid, None if genre == '不限题材' else genre)
+            with st.spinner('TDC-Rec 双通道召回与重排…'):
+                result = service.recommend(uid, None if genre == '全部题材' else genre)
         except KeyError:
-            st.info('还没有找到这份观影档案，先选择上面的观影口味试试看。')
+            st.info(f'未找到档案 #{uid}，请切换顶部预设口味。')
         except Exception:
-            st.warning('推荐暂时有些忙，请稍后重试。你也可以试试“一句话找电影”。')
+            st.warning('推荐服务繁忙，请稍后重试。')
         else:
-            prefs = result['user'].get('genre_preferences') or {}
-            favorite = sorted(prefs, key=prefs.get, reverse=True)[:3]
-            if favorite:
-                st.caption('这份档案常看的题材：' + '、'.join(favorite))
+            user_info = result['user']
+            prefs = user_info.get('genre_preferences') or {}
+            top_pref = ' · '.join(sorted(prefs, key=prefs.get, reverse=True)[:3]) or '多元题材'
+            tau = float(user_info.get('tolerance_tau', 0.0))
+            k1, k2, k3, k4 = st.columns(4, gap='small')
+            k1.metric('当前画像', user_info.get('user_type_label', '均衡观影派'), f'档案 #{user_info["user_id"]}')
+            k2.metric('争议容忍度 τ', f'{tau:.2f}', '自动压降高分歧' if tau < 0.28 else ('保留两极佳作' if tau > 0.50 else '口碑多样性均衡'))
+            k3.metric('偏好题材', top_pref, f'历史 {int(user_info.get("rating_count", 0)):,} 部')
+            k4.metric('双向量候选池', '140,502', 'ALS 50D + BGE 512D')
+
             movies = result.get('recommendations') or []
             if not movies:
-                st.info('暂时没有找到合适的电影，换个题材试试吧。')
+                st.info('该题材下暂无推荐，试试切换题材。')
             else:
-                st.subheader('为这份口味挑选的电影')
-                cards(movies, 'rec')
+                _cards(movies, 'rec')
+
     with scene:
-        st.subheader('把此刻的心情，变成一份片单')
-        st.caption('例如：雨天独自看的温暖科幻片 / 和朋友一起看的轻松喜剧 / 想看节奏紧凑的悬疑片')
-        with st.form('scene_search'):
-            query = st.text_input('你想看怎样的电影？', max_chars=300, placeholder='说说题材、心情，或者想和谁一起看…')
-            avoid = st.checkbox('优先选择观众评价较一致的电影', value=True)
-            submit = st.form_submit_button('帮我找电影', width='stretch')
-        if submit:
-            if not query.strip():
-                st.info('先写下你想看的电影感觉吧。')
+        presets = ['雨天独自看的温暖科幻片', '零差评轻松喜剧', '节奏紧凑的高分悬疑', '华语高口碑剧情佳作']
+        p_cols = st.columns(len(presets), gap='small')
+        for idx, p_text in enumerate(presets):
+            with p_cols[idx]:
+                if st.button(f'✦ {p_text}', key=f'preset_{idx}', width='stretch'):
+                    st.session_state['scene_query_box'] = p_text
+                    st.session_state['scene_trigger'] = p_text
+
+        with st.form('scene_search', border=False):
+            s1, s2, s3 = st.columns([3.2, 1.15, 0.95], gap='small')
+            with s1:
+                query = st.text_input(
+                    '情境描述',
+                    key='scene_query_box',
+                    max_chars=200,
+                    placeholder='输入心情、场景或想看的感觉（BGE 512维中文语义检索）…',
+                    label_visibility='collapsed',
+                )
+            with s2:
+                avoid = st.toggle('🛡️ 过滤高争议', value=True)
+            with s3:
+                submit = st.form_submit_button('帮我找电影', width='stretch')
+
+        active_query = query.strip() if submit else st.session_state.pop('scene_trigger', '')
+        if active_query:
+            try:
+                with st.spinner('Weaviate 512 维语义检索中…'):
+                    found = service.search(active_query, avoid)
+                st.session_state['scene_result'] = (active_query, avoid, found)
+            except Exception:
                 st.session_state.pop('scene_result', None)
-            else:
-                try:
-                    with st.spinner('正在寻找和你描述相近的电影…'):
-                        movies = service.search(query.strip(), avoid)
-                    st.session_state['scene_result'] = (query.strip(), avoid, movies)
-                except Exception:
-                    st.session_state.pop('scene_result', None)
-                    st.warning('这次没能完成搜索，请稍后再试。')
+                st.warning('检索服务繁忙，请稍后重试。')
+        elif submit:
+            st.info('请输入搜索词或点击上方快捷场景。')
+
         if 'scene_result' in st.session_state:
             text, preferred, movies = st.session_state['scene_result']
-            st.markdown(f'**为「{html.escape(text)}」找到的电影**')
-            if preferred and any(float(m.get('controversy_score', 0)) >= .5 for m in movies):
-                st.info('这次没有找到口碑足够一致的候选，下面也包含评价有分歧的电影。建议先看看详情。')
-            if not movies:
-                st.info('暂时没有找到合适的结果，试试换一种描述。')
-            cards(movies, 'scene')
+            st.markdown(f'**「{html.escape(text)}」 · Top {len(movies)}**')
+            if movies:
+                _cards(movies, 'scene')
+            else:
+                st.info('暂无匹配结果，换个描述试试。')
 
 
 with st.sidebar:
-    st.title('🎬 知影')
-    st.caption('好电影，也要合你的口味')
-    page = st.radio('去哪里逛逛', ['发现电影', '口碑全景', '观影发现'])
-    st.divider()
-    st.caption('评分不是全部。看一眼观众的分歧，再决定要不要按下播放键。')
+    st.markdown(
+        '<div class="brand-box">'
+        '<div class="brand-title">🎬 知影</div>'
+        '<div class="brand-sub">CINEPULSE · BIG DATA REC</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    page = st.radio('导航', ['发现电影', '口碑全景', '观影发现'], label_visibility='collapsed')
+    live_alerts = len(service.alerts(limit=6))
+    st.markdown(
+        '<div class="engine-box">'
+        '<div class="engine-head"><span class="pulse-dot pulse-green"></span><span>分布式架构在线</span></div>'
+        '<div class="engine-item"><span>Hadoop · YARN</span><b>3 节点集群</b></div>'
+        '<div class="engine-item"><span>Hive · Spark</span><b>416.9 万评分</b></div>'
+        '<div class="engine-item"><span>Weaviate</span><b>140,502 双向量</b></div>'
+        f'<div class="engine-item"><span>Streaming</span><b>{live_alerts} 条实时预警</b></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
 try:
     {'发现电影': hall, '口碑全景': panorama, '观影发现': overview}[page]()
 except Exception:
     import logging
     logging.exception('page failed: %s', page)
-    st.warning('页面暂时没有准备好，请稍后再试。')
+    st.warning('页面加载异常，请刷新重试。')
