@@ -14,7 +14,7 @@ import data_access as data
 
 _REPO_M3 = Path(__file__).resolve().parents[1] / '03_weaviate_stream_eval'
 _RUNTIME_M3 = Path(__file__).parent / 'runtime' / 'member3'
-SOURCE = Path(os.getenv('DOUBAN_SERVICE_SOURCE', str(_REPO_M3 if _REPO_M3.is_dir() else _RUNTIME_M3)))
+SOURCE = Path(os.getenv('DOUBAN_SERVICE_SOURCE', str(_REPO_M3 if (_REPO_M3 / 'core.py').exists() else _RUNTIME_M3)))
 LOCK = threading.RLock()
 
 
