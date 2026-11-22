@@ -585,7 +585,8 @@ def detail():
             st.plotly_chart(charts.star_mini(hist), width='stretch', config={'displayModeBar': False})
 
     summary = str(result.get('ai_summary') or '暂无正反方短评摘要。')
-    st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{html.escape(summary)}</div>', unsafe_allow_html=True)
+    summary_html = html.escape(summary).replace('\n', '<br>')
+    st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{summary_html}</div>', unsafe_allow_html=True)
 
     pos_col, neg_col = st.columns(2, gap='medium')
     with pos_col:
