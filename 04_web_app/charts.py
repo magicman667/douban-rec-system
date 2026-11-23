@@ -561,17 +561,71 @@ def ml_roc_curves(roc_df, metrics_df):
             x=[0.0, 1.0],
             y=[0.0, 1.0],
             mode='lines',
-            line=dict(color='rgba(148,163,184,0.35)', width=1.2, dash='dot'),
+            line=dict(color='rgba(148,163,184,0.30)', width=1.1, dash='dot'),
             name='随机基线 (0.500)',
             hoverinfo='skip',
         )
     )
-    for model_key, grp in roc_df.groupby('model', sort=False):
+
+    groups = {k: g.sort_values('fpr') for k, g in roc_df.groupby('model', sort=False)}
+    als_grp = groups.get('ALS_Dot')
+    best_key = max((k for k in groups if k != 'ALS_Dot'), key=lambda k: float(auc_map.get(k, 0.0)), default=None)
+
+    # Shaded gain band between pure ALS and best ML model
+    if als_grp is not None and best_key is not None:
+        best_grp = groups[best_key]
+        band_x = np.linspace(0.0, 1.0, 80)
+        als_y = np.interp(band_x, als_grp['fpr'].values, als_grp['tpr'].values)
+        best_y = np.interp(band_x, best_grp['fpr'].values, best_grp['tpr'].values)
+        fig.add_trace(
+            go.Scatter(
+                x=band_x,
+                y=als_y,
+                mode='lines',
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo='skip',
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=band_x,
+                y=best_y,
+                mode='lines',
+                line=dict(width=0),
+                fill='tonexty',
+                fillcolor='rgba(56, 189, 248, 0.12)',
+                showlegend=False,
+                hoverinfo='skip',
+            )
+        )
+
+    dash_map = {
+        'ALS_Dot': 'dash',
+        'L2-LR': 'solid',
+        'Spark_YARN_GBT': 'solid',
+        'FM': 'dashdot',
+        'GBDT+LR': 'dot',
+        'GBDT': 'solid',
+    }
+    width_map = {
+        'ALS_Dot': 2.2,
+        'L2-LR': 1.8,
+        'Spark_YARN_GBT': 2.0,
+        'FM': 2.1,
+        'GBDT+LR': 2.4,
+        'GBDT': 2.6,
+    }
+    draw_order = [k for k in ('ALS_Dot', 'L2-LR', 'Spark_YARN_GBT', 'FM', 'GBDT+LR', 'GBDT') if k in groups]
+    for k in groups:
+        if k not in draw_order:
+            draw_order.append(k)
+
+    for model_key in draw_order:
+        grp = groups[model_key]
         auc = float(auc_map.get(model_key, 0.0))
         short = ML_SHORT_NAMES.get(model_key, model_key)
         color = ML_PALETTE.get(model_key, '#CBD5E1')
-        is_baseline = model_key == 'ALS_Dot'
-        is_hero = model_key in ('GBDT', 'GBDT+LR')
         fig.add_trace(
             go.Scatter(
                 x=grp['fpr'],
@@ -580,16 +634,121 @@ def ml_roc_curves(roc_df, metrics_df):
                 name=f'{short} ({auc:.4f})',
                 line=dict(
                     color=color,
-                    width=2.8 if is_hero else 1.9,
-                    dash='dash' if is_baseline else 'solid',
+                    width=width_map.get(model_key, 2.0),
+                    dash=dash_map.get(model_key, 'solid'),
                 ),
                 hovertemplate=f'<b>{short}</b> (AUC={auc:.4f})<br>FPR=%{{x:.3f}} · TPR=%{{y:.3f}}<extra></extra>',
             )
         )
+
+    # Embedded inset: ΔTPR gain over pure ALS (pp) in the naturally empty lower-right quadrant
+    inset_min, inset_max = 4.0, 10.5
+    if als_grp is not None:
+        grid = np.linspace(0.08, 0.65, 58)
+        als_ref = np.interp(grid, als_grp['fpr'].values, als_grp['tpr'].values)
+        all_deltas = []
+        for model_key in draw_order:
+            if model_key == 'ALS_Dot':
+                continue
+            grp = groups[model_key]
+            delta_pp = (np.interp(grid, grp['fpr'].values, grp['tpr'].values) - als_ref) * 100.0
+            all_deltas.append(delta_pp)
+            short = ML_SHORT_NAMES.get(model_key, model_key)
+            color = ML_PALETTE.get(model_key, '#CBD5E1')
+            fig.add_trace(
+                go.Scatter(
+                    x=grid,
+                    y=delta_pp,
+                    xaxis='x2',
+                    yaxis='y2',
+                    mode='lines',
+                    showlegend=False,
+                    line=dict(
+                        color=color,
+                        width=width_map.get(model_key, 2.0),
+                        dash=dash_map.get(model_key, 'solid'),
+                    ),
+                    hovertemplate=f'<b>{short}</b> 相对纯 ALS<br>FPR=%{{x:.2f}} · ΔTPR=<b>+%{{y:.2f}}pp</b><extra></extra>',
+                )
+            )
+        if all_deltas:
+            flat = np.concatenate(all_deltas)
+            inset_min = max(0.0, math.floor((float(flat.min()) - 0.5) * 2) / 2)
+            inset_max = math.ceil((float(flat.max()) + 0.7) * 2) / 2
+
+    als_auc = float(auc_map.get('ALS_Dot', 0.759))
+    best_auc = float(auc_map.get(best_key, 0.8296)) if best_key else als_auc
+    gain_pp = (best_auc - als_auc) * 100.0
+
     fig.update_xaxes(title_text='假阳性率 (FPR)', range=[0.0, 1.0])
     fig.update_yaxes(title_text='真阳性率 (TPR)', range=[0.0, 1.02])
-    style(fig, '测试集 ROC 曲线对比（89.8 万未见评分）', height=380, margin=dict(l=24, r=18, t=46, b=98))
-    fig.update_layout(legend=dict(orientation='h', y=-0.27, yanchor='top', x=0.5, xanchor='center', font=dict(size=10)))
+    style(fig, '测试集 ROC 曲线与相对纯 ALS 增益放大（89.8 万未见评分）', height=390, margin=dict(l=24, r=18, t=46, b=96))
+    fig.update_layout(
+        xaxis2=dict(
+            domain=[0.44, 0.96],
+            anchor='y2',
+            range=[0.08, 0.65],
+            dtick=0.2,
+            tickfont=dict(size=9.5, color='#94A3B8'),
+            gridcolor='rgba(148, 163, 184, 0.12)',
+            zeroline=False,
+            title=dict(text='FPR', font=dict(size=9.5, color='#94A3B8'), standoff=2),
+        ),
+        yaxis2=dict(
+            domain=[0.11, 0.56],
+            anchor='x2',
+            range=[inset_min, inset_max],
+            ticksuffix='%',
+            dtick=2,
+            tickfont=dict(size=9.5, color='#94A3B8'),
+            gridcolor='rgba(148, 163, 184, 0.12)',
+            zeroline=False,
+        ),
+        shapes=[
+            dict(
+                type='rect',
+                xref='paper',
+                yref='paper',
+                x0=0.38,
+                y0=0.04,
+                x1=0.985,
+                y1=0.635,
+                fillcolor='rgba(10, 16, 30, 0.90)',
+                line=dict(color='rgba(56, 189, 248, 0.32)', width=1),
+                layer='below',
+            )
+        ],
+        annotations=[
+            dict(
+                x=0.24,
+                y=0.69,
+                xref='x',
+                yref='y',
+                text=f'<b>+{gain_pp:.2f}pp AUC</b>',
+                showarrow=True,
+                arrowhead=2,
+                ax=-26,
+                ay=-34,
+                arrowcolor='#38BDF8',
+                font=dict(size=10.5, color='#E0F2FE'),
+                bgcolor='rgba(14, 23, 42, 0.85)',
+                bordercolor='rgba(56, 189, 248, 0.45)',
+                borderpad=3,
+            ),
+            dict(
+                xref='paper',
+                yref='paper',
+                x=0.40,
+                y=0.615,
+                xanchor='left',
+                yanchor='top',
+                text='<b>🔍 局部放大：各 ML 相对纯 ALS 的 TPR 增益 (ΔTPR)</b>',
+                showarrow=False,
+                font=dict(size=10, color='#38BDF8'),
+            ),
+        ],
+        legend=dict(orientation='h', y=-0.27, yanchor='top', x=0.5, xanchor='center', font=dict(size=10)),
+    )
     return fig
 
 
