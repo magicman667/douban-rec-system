@@ -837,7 +837,7 @@ def hall():
                 unsafe_allow_html=True,
             )
         ranker_options = {
-            'GBDT+LR (Facebook 架构)': ('GBDT+LR', 'Trees+LR 精排'),
+            'GBDT+LR 树叶交叉精排': ('GBDT+LR', '树叶交叉 + LR'),
             'Hist-GBDT 梯度提升树': ('GBDT', '240 棵提升树'),
             'FM 分解机 (二阶交叉)': ('FM', 'k=16 特征交叉'),
             '规则重排 (对照组)': ('规则重排', 'RRF 手工公式'),
