@@ -69,7 +69,14 @@ st.markdown('''<style>
 }
 
 [data-testid="stHeader"] { background: rgba(6, 9, 19, 0.65); backdrop-filter: blur(10px); }
-[data-testid="stToolbar"] { visibility: hidden; }
+[data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stMainMenu"] { display: none !important; }
+[data-testid="stExpandSidebarButton"] {
+  visibility: visible !important;
+  background: rgba(20, 30, 51, 0.90) !important;
+  border: 1px solid rgba(245, 158, 11, 0.50) !important;
+  border-radius: 8px !important;
+  color: #fbbf24 !important;
+}
 [data-testid="stSidebar"] {
   background: linear-gradient(180deg, #0b1120 0%, #070b15 100%);
   border-right: 1px solid var(--border);
@@ -677,7 +684,7 @@ def detail():
     pos = result.get('pos_comments') or []
     neg = result.get('neg_comments') or []
     if not pos and not neg:
-        st.caption('💡 该片未收录于开源 104.8 万行文本短评子集（原始 CSV 受 Excel 行数上限截断），上方已基于评分分布与双向量特征为您完成排雷诊断。')
+        st.caption('💡 文本短评库暂未收录本片精选短评，上方已基于本系统评分分布与双向量特征为您完成口碑排雷诊断。')
     else:
         pos_col, neg_col = st.columns(2, gap='medium')
         with pos_col:

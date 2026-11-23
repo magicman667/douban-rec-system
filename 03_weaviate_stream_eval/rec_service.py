@@ -206,7 +206,7 @@ def _fallback_summary(movie_or_pos, pos: list[str] | None = None, neg: list[str]
         lines.append(f"【口碑定性】《{title}》参考口碑 {r:.2f}/5，分歧指数 {idx}/100（{tier}，原始 C={c:.3f}）。")
 
     if not clean_pos and not clean_neg:
-        lines.append("📝 短评覆盖说明：该片未收录于开源 104.8 万行短评子集，以上定性基于本系统评分分布，建议结合星级柱状图与同类型平替参考。")
+        lines.append("📝 短评覆盖说明：文本短评库暂未收录本片精选短评，以上定性基于本系统评分分布与双向量特征，建议结合星级柱状图与同类型平替参考。")
         return "\n".join(lines)
 
     if clean_pos:
