@@ -256,16 +256,16 @@ def _df_to_records(sub_df):
     return records
 
 
-def search_catalog(
-    query_text='',
-    genre=None,
-    region_filter='全部地区',
-    risk_filter='全部',
-    sort_by='人气最高',
-    min_ratings=0,
-    limit=15,
-):
+CHINESE_REGIONS = {'中国大陆', '中国香港', '香港', '中国台湾', '台湾'}
+
+
+@lru_cache(maxsize=1)
+def load_rating_counts():
     df = load_catalog_df()
+    return dict(zip(df['movie_id'].astype(int), df['rating_count'].astype(int)))
+
+
+def _catalog_scope_mask(df, genre=None, region_filter='全部地区', min_ratings=0):
     mask = df['rating_count'] >= int(min_ratings)
 
     if region_filter == '中国大陆':
@@ -280,9 +280,23 @@ def search_catalog(
     if genre and genre != '全部题材':
         g = str(genre)
         mask &= df['genres_str'].str.contains(g, regex=False) | (df['main_genre'] == g)
+    return mask
+
+
+def search_catalog(
+    query_text='',
+    genre=None,
+    region_filter='全部地区',
+    risk_filter='全部',
+    sort_by='人气最高',
+    min_ratings=0,
+    limit=15,
+):
+    df = load_catalog_df()
+    mask = _catalog_scope_mask(df, genre=genre, region_filter=region_filter, min_ratings=min_ratings)
 
     if risk_filter == '稳妥共识':
-        mask &= df['controversy_score'] < 0.35
+        mask &= df['controversy_score'] <= 0.285
     elif risk_filter == '两极争议':
         mask &= df['controversy_score'] >= 0.50
 
@@ -324,32 +338,87 @@ def search_catalog(
     return _df_to_records(sub.head(int(limit))), total
 
 
-def hot_mainland_movies(mode='华语新片热榜', limit=5):
+def hot_mainland_movies(mode='华语热门精选', limit=5):
+    """Return high-reliability Chinese spotlight films strictly matched to mode."""
     df = load_catalog_df()
-    is_cn = df['regions_list'].apply(lambda lst: len(lst) > 0 and lst[0] == '中国大陆')
-    base = df[is_cn & (df['rating_count'] >= 50)]
+    is_cn = df['regions_list'].apply(lambda lst: len(lst) > 0 and lst[0] in CHINESE_REGIONS)
+    base = df[is_cn & df['has_cover'] & (df['rating_count'] >= 100)]
+    sort_cols = ['douban_votes', 'rating_count', 'bayesian_rating']
 
     if '稳妥' in mode:
-        sub = base[(base['controversy_score'] < 0.36) & (base['bayesian_rating'] >= 3.8)]
+        sub = base[(base['controversy_score'] <= 0.285) & (base['bayesian_rating'] >= 4.0)]
         if len(sub) < int(limit):
-            sub = base[base['controversy_score'] < 0.38]
-        sub = sub.sort_values(['has_cover', 'douban_votes', 'bayesian_rating'], ascending=[False, False, False])
-        return _df_to_records(sub.head(int(limit)))
+            sub = base[base['controversy_score'] <= 0.32]
+        return _df_to_records(sub.sort_values(sort_cols, ascending=False).head(int(limit)))
 
     if '争议' in mode:
-        sub = base[(base['controversy_score'] >= 0.50) & (base['douban_votes'] >= 50000)]
+        sub = base[(base['controversy_score'] >= 0.50) & (base['rating_count'] >= 150) & (base['douban_votes'] >= 100000)]
         if len(sub) < int(limit):
-            sub = base[base['controversy_score'] >= 0.45]
-        sub = sub.sort_values(['has_cover', 'douban_votes', 'controversy_score'], ascending=[False, False, False])
-        return _df_to_records(sub.head(int(limit)))
+            sub = base[base['controversy_score'] >= 0.50]
+        return _df_to_records(sub.sort_values(['douban_votes', 'rating_count', 'controversy_score'], ascending=False).head(int(limit)))
 
-    # Default: prioritize authentic Mainland blockbusters with verified posters & reliable sample counts
-    recent = base[(base['year_int'] >= 2012) & base['has_cover']].sort_values(['douban_votes', 'year_int'], ascending=[False, False])
-    picked = recent.head(int(limit))
-    if len(picked) < int(limit):
-        more = base[base['has_cover']].sort_values(['douban_votes', 'bayesian_rating'], ascending=[False, False])
-        picked = pd.concat([picked, more]).drop_duplicates('movie_id').head(int(limit))
-    return _df_to_records(picked)
+    # Default: high-reliability, high-vote modern Chinese cinema (excluding extreme landmines/low-sample quirks)
+    sub = base[(base['year_int'] >= 2008) & (base['bayesian_rating'] >= 3.6) & (base['controversy_score'] < 0.50) & (base['rating_count'] >= 120)]
+    if len(sub) < int(limit):
+        sub = base[(base['bayesian_rating'] >= 3.6) & (base['controversy_score'] < 0.50)]
+    return _df_to_records(sub.sort_values(sort_cols, ascending=False).head(int(limit)))
+
+
+def recall_reliable_candidates(
+    archetype_mode,
+    genre=None,
+    region_scope='全部地区',
+    min_ratings=100,
+    min_votes=20000,
+    limit=64,
+):
+    """Recall genre-diverse, high-reliability mainstream candidates aligned with a risk archetype."""
+    df = load_catalog_df()
+    scope_mask = _catalog_scope_mask(df, genre=genre, region_filter=region_scope, min_ratings=0)
+
+    archetype_masks = {
+        'safe': (
+            (df['controversy_score'] <= 0.285) & (df['bayesian_rating'] >= 3.85),
+            df['controversy_score'] <= 0.34,
+        ),
+        'balanced': (
+            (df['controversy_score'] > 0.285) & (df['controversy_score'] < 0.48) & (df['bayesian_rating'] >= 3.65),
+            (df['controversy_score'] < 0.50) & (df['bayesian_rating'] >= 3.4),
+        ),
+        'hunter': (
+            (df['controversy_score'] >= 0.495) & (df['bayesian_rating'] >= 2.50),
+            df['controversy_score'] >= 0.44,
+        ),
+    }
+    strict_mask, relaxed_mask = archetype_masks.get(archetype_mode, archetype_masks['balanced'])
+
+    min_r = max(30, int(min_ratings))
+    min_v = max(0, int(min_votes))
+    tiers = [
+        scope_mask & df['has_cover'] & (df['rating_count'] >= min_r) & (df['douban_votes'] >= min_v) & strict_mask,
+        scope_mask & (df['rating_count'] >= max(50, min_r // 2)) & (df['douban_votes'] >= max(3000, min_v // 4)) & strict_mask,
+        scope_mask & (df['rating_count'] >= 30) & relaxed_mask,
+    ]
+    sub = df.iloc[0:0]
+    for tier_mask in tiers:
+        cand = df.loc[tier_mask]
+        if len(cand) >= 12:
+            sub = cand
+            break
+        if len(cand) > len(sub):
+            sub = cand
+    if not len(sub):
+        return []
+
+    sort_cols = ['has_cover', 'douban_votes', 'rating_count', 'bayesian_rating']
+    sub_sorted = sub.sort_values(sort_cols, ascending=False)
+    if genre:
+        return _df_to_records(sub_sorted.head(int(limit)))
+
+    # Preserve non-drama genres in recall so max-4-per-genre capping still yields 10 diverse mainstream hits
+    per_genre = sub_sorted.groupby('main_genre', sort=False).head(8)
+    combined = pd.concat([per_genre, sub_sorted.head(int(limit))]).drop_duplicates('movie_id')
+    return _df_to_records(combined.sort_values(sort_cols, ascending=False).head(int(limit) * 2))
 
 
 @lru_cache(maxsize=1)

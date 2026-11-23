@@ -405,8 +405,12 @@ class MLRankerEngine:
             item = dict(m)
             prob = float(probs[idx])
             c = float(item.get("controversy_score") or 0.0)
-            excess = max(0.0, c - tau)
-            explore = 0.12 * c if tau > 0.50 else 0.0
+            if tau > 0.50:
+                excess = 0.0
+                explore = 0.26 * c
+            else:
+                excess = max(0.0, c - tau)
+                explore = 0.0
             rc = int(item.get("rating_count") or 0)
             pop_bonus = float(popularity_weight) * float(np.log1p(max(0, rc)) / 6.0)
             # Keep ML predicted match probability honest while applying asymmetric landmine safety

@@ -524,14 +524,15 @@ def _poster_html(movie, poster_cache=None):
 
 def _archetype_badge(movie):
     c = float(movie.get('controversy_score', 0))
+    div_idx, _, _, _ = data.divergence_tier(c)
     label = str(movie.get('archetype_label') or '')
-    if '争议' in label or c >= 0.50:
+    if div_idx >= 70 or c >= 0.50:
         return ('⚡ 两极争议', 'chip-warn')
-    if '避雷' in label:
+    if '避雷' in label and float(movie.get('bayesian_rating') or 0) < 3.0:
         return ('⚠️ 避雷预警', 'chip-warn')
-    if '宝藏' in label:
-        return ('💎 冷门宝藏', 'chip-gem')
-    if '稳妥' in label or c < 0.28:
+    if div_idx <= 35:
+        if '宝藏' in label and int(movie.get('douban_votes') or 0) < 10000:
+            return ('💎 冷门宝藏', 'chip-gem')
         return ('🛡️ 稳妥共识', 'chip-safe')
     return ('✦ 口碑均衡', 'chip-mid')
 
@@ -798,24 +799,24 @@ def hall():
     personal, catalog, scene = st.tabs(['✨ 为你推荐', '🎬 搜电影', '🔍 一句话情境找片'])
 
     with personal:
-        # ── Homepage Spotlight: Recent Mainland China Blockbusters ──
+        # ── Homepage Spotlight: Representative High-Reliability Chinese Cinema ──
         sp1, sp2 = st.columns([2.2, 2.0], gap='small')
         with sp1:
             st.markdown(
                 '<div class="sec-bar"><div>'
-                '<span class="sec-title">🇨🇳 中国大陆热门新片</span> '
-                '<span class="sec-sub">· 全网高人气院线代表作</span>'
+                '<span class="sec-title">🇨🇳 华语高热代表作</span> '
+                '<span class="sec-sub">· 高口碑、高样本量院线精选</span>'
                 '</div></div>',
                 unsafe_allow_html=True,
             )
         with sp2:
             cn_mode = st.segmented_control(
                 '华语榜单',
-                ['华语新片热榜', '华语稳妥佳作', '华语高热争议'],
-                default='华语新片热榜',
+                ['华语热门精选', '华语稳妥佳作', '华语高热争议'],
+                default='华语热门精选',
                 label_visibility='collapsed',
                 key='cn_spotlight_mode',
-            ) or '华语新片热榜'
+            ) or '华语热门精选'
 
         try:
             mainland_movies = service.hot_mainland(mode=cn_mode, limit=5)
@@ -861,9 +862,9 @@ def hall():
         choices = [lbl for lbl in ordered_labels if lbl in option_uid] or list(option_uid.keys())
 
         mode_specs = {
-            '经典热片': (100, 0.18, 'Filtered HNSW ≥100评'),
-            '主流口碑': (50, 0.14, 'Filtered HNSW ≥50评'),
-            '全库挖宝': (0, 0.0, '全库 140,502 无过滤'),
+            '经典热片': (100, 0.24, 50000, '高可信 ≥100样本 · ≥5万人评'),
+            '主流口碑': (100, 0.16, 20000, '高可信 ≥100样本 · ≥2万人评'),
+            '全库挖宝': (0, 0.0, 0, '全库 140,502 无热度门槛'),
         }
 
         bar1, bar2, bar3, bar4, bar5 = st.columns([1.85, 1.85, 0.85, 0.85, 0.60], gap='small')
@@ -877,7 +878,7 @@ def hall():
                 default='主流口碑',
                 label_visibility='collapsed',
             ) or '主流口碑'
-        min_r, pop_w, mode_desc = mode_specs[pop_mode]
+        min_r, pop_w, min_v, mode_desc = mode_specs[pop_mode]
         with bar3:
             rec_region = st.selectbox('推荐地区', ['全部地区', '中国大陆', '华语电影'], label_visibility='collapsed', key='rec_region_select')
         with bar4:
@@ -898,6 +899,7 @@ def hall():
                     popularity_weight=pop_w,
                     region_scope=rec_region,
                     ranker=ranker_key,
+                    min_votes=min_v,
                 )
         except KeyError:
             st.info(f'未找到档案 #{uid}，请切换顶部预设口味。')

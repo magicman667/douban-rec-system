@@ -82,9 +82,10 @@ def _check_playwright_e2e():
         page = browser.new_page(viewport={'width': 1440, 'height': 900})
         page.goto('http://127.0.0.1:8501', wait_until='domcontentloaded', timeout=30000)
         page.wait_for_selector('.film-card', timeout=35000)
+        btn = page.locator('button:has-text("排雷详情")')
+        btn.nth(4).wait_for(timeout=20000)
         assert page.locator('[data-testid="stException"]').count() == 0
 
-        btn = page.locator('button:has-text("排雷详情")')
         assert btn.count() >= 5
         btn.first.click()
         page.wait_for_selector('.div-gauge', timeout=25000)
