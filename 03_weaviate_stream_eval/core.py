@@ -150,18 +150,22 @@ class Candidate:
     rrf_score: float = 0.0
 
 
-def rrf_score(als_rank: int | None, vector_rank: int | None, *, k: int = 60) -> float:
+def rrf_score(
+    als_rank: int | None, vector_rank: int | None, *, k: int = 60, als_weight: float = 0.5
+) -> float:
     terms = []
     if als_rank is not None:
-        terms.append(0.5 / (k + als_rank))
+        terms.append(als_weight / (k + als_rank))
     if vector_rank is not None:
-        terms.append(0.5 / (k + vector_rank))
+        terms.append((1.0 - als_weight) / (k + vector_rank))
     return float(k + 1) * sum(terms)
 
 
-def utility_score(candidate: Candidate, profile: UserProfile) -> float:
+def utility_score(
+    candidate: Candidate, profile: UserProfile, *, als_weight: float = 0.5, rrf_k: int = 60
+) -> float:
     movie = candidate.movie
-    base = rrf_score(candidate.als_rank, candidate.vector_rank)
+    base = rrf_score(candidate.als_rank, candidate.vector_rank, k=rrf_k, als_weight=als_weight)
     preference = profile.genre_preferences.get(movie.main_genre, 0.0)
     excess_risk = max(0.0, movie.controversy_score - profile.tolerance_tau)
     exploration = 0.25 * movie.controversy_score if profile.tolerance_tau > 0.5 else 0.0
@@ -184,6 +188,9 @@ def fuse_rankings(
     top_k: int = 10,
     max_per_genre: int = 4,
     genre_filter: str | None = None,
+    als_weight: float = 0.5,
+    rrf_k: int = 60,
+    excluded_movie_ids: set[int] | None = None,
 ) -> list[Candidate]:
     merged: dict[int, Candidate] = {}
     for rank, (movie, score) in enumerate(als, start=1):
@@ -193,7 +200,16 @@ def fuse_rankings(
         item.vector_rank = rank
         item.vector_score = float(score)
     candidates = [item for item in merged.values() if not genre_filter or genre_filter in item.movie.genres or item.movie.main_genre == genre_filter]
-    candidates.sort(key=lambda item: (utility_score(item, profile), item.movie.rating_count, -item.movie.movie_id), reverse=True)
+    if excluded_movie_ids:
+        candidates = [item for item in candidates if item.movie.movie_id not in excluded_movie_ids]
+    candidates.sort(
+        key=lambda item: (
+            utility_score(item, profile, als_weight=als_weight, rrf_k=rrf_k),
+            item.movie.rating_count,
+            -item.movie.movie_id,
+        ),
+        reverse=True,
+    )
     selected: list[Candidate] = []
     genre_counts: dict[str, int] = {}
     for item in candidates:

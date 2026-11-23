@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from core import Movie, UserProfile, candidate_to_dict, fuse_rankings
+from fusion_policy import recommendation_fusion_parameters
 from repository import RetrievalRepository
 
 
@@ -81,7 +82,11 @@ def get_user_recommendations(user_id: int, genre_filter: str | None = None, top_
     else:
         als = repo.als_candidates(int(user_id), pool)
         vector = repo.semantic_for_user(int(user_id), pool)
-    ranked = fuse_rankings(als, vector, profile, top_k=top_k, genre_filter=genre_filter)
+    als_weight, rrf_k = recommendation_fusion_parameters(profile.rating_count)
+    ranked = fuse_rankings(
+        als, vector, profile, top_k=top_k, genre_filter=genre_filter,
+        als_weight=als_weight, rrf_k=rrf_k,
+    )
     return {
         "user": {
             "user_id": profile.user_id,

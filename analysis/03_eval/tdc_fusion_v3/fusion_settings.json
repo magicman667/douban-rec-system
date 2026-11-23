@@ -1,0 +1,17 @@
+{
+  "1–9": {
+    "policy": "fixed",
+    "als_weight": 0.7,
+    "rrf_k": 100
+  },
+  "10–29": {
+    "policy": "fixed",
+    "als_weight": 0.6,
+    "rrf_k": 60
+  },
+  "30+": {
+    "policy": "fixed",
+    "als_weight": 0.6,
+    "rrf_k": 60
+  }
+}

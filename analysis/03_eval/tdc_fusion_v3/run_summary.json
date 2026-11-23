@@ -1,0 +1,18 @@
+{
+  "evaluation_users": 50000,
+  "cohort_users": 185149,
+  "seed": 44,
+  "tuning_users": 20000,
+  "pilot_seed": 42,
+  "excluded_previous_users": 40000,
+  "previous_seed": 43,
+  "catalog_movies": 140502,
+  "candidate_limit_per_route": 100,
+  "conservative_users": 7538,
+  "long_history_users": 4580,
+  "fixed_risk_definition": "original controversy >= 0.50 and original tolerance < 0.28",
+  "same_seen_filter": "remove seen movies before selecting Top 10 across all methods",
+  "grid_candidates_per_band": 24,
+  "selection_rule": "max NDCG subject to recall and landmine rate at least as good as the strengthened baseline",
+  "elapsed_seconds": 342.9282311940042
+}
