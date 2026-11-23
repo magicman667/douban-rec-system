@@ -1,0 +1,7 @@
+model,display_name,engine,roc_auc,gauc,pr_auc,logloss,accuracy,train_sec,yarn_app_id
+ALS_Dot,纯 ALS 协同得分 (课堂基础),Spark MLlib ALS,0.758951,0.771261,0.737625,0.594236,0.707514,0.24,-
+L2-LR,L2 逻辑回归 (全特征线性),scikit-learn LR,0.818573,0.781529,0.779835,0.518686,0.738709,1.78,-
+FM,FM 分解机 (k=16 二阶交叉),NumPy AdaGrad FM,0.827234,0.785515,0.789206,0.506195,0.746814,3.41,-
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),Spark YARN MLlib,0.824911,0.781722,0.787416,0.510861,0.743531,43.49,application_1795351088747_0004
+GBDT,梯度提升树 (Hist-GBDT),scikit-learn HistGBDT,0.829564,0.785666,0.792837,0.503357,0.748279,6.58,-
+GBDT+LR,GBDT + LR (Facebook 架构),Trees + Sparse LR,0.828036,0.784108,0.790875,0.505565,0.747137,34.04,-

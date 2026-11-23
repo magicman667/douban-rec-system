@@ -1,0 +1,22 @@
+feature,label_zh,importance,std
+als_dot,ALS 协同内积,0.074943,0.000706
+bayesian_rating,电影贝叶斯口碑,0.050051,0.000508
+user_log_history,用户观影总数量 (log),0.032859,0.00039
+user_als_norm,用户协同活跃模长,0.011435,0.000165
+user_pos_rate,用户历史好评率,0.010099,0.000333
+user_mean_rating,用户历史平均打分,0.003338,0.000167
+z_genre_score,同题材相对分 Z,0.001983,0.000114
+user_rating_std,用户打分严苛波动,0.001794,0.000213
+log_douban_votes,豆瓣全站热度 (log),0.00144,7.3e-05
+movie_als_norm,电影协同流行模长,0.001271,8.5e-05
+user_tolerance_tau,用户分歧容忍度 τ,0.000744,8.2e-05
+als_cos,ALS 协同余弦,0.000679,3.4e-05
+movie_year,电影上映年份,0.00044,4.9e-05
+controversy_score,耦合分歧度 C,0.000406,3.9e-05
+c_times_tau,分歧 × 容忍度交互,0.000245,2.2e-05
+rating_minus_user_mean,影片口碑 − 用户均分,0.000229,4e-05
+genre_max_affinity,全题材最大契合度,0.000203,4e-05
+log_rating_count,建模评分样本量 (log),0.000184,6.5e-05
+genre_affinity,主题材偏好度,5.4e-05,1.3e-05
+risk_margin,分歧安全余量 (τ−C),3.2e-05,9e-06
+excess_risk,"超额分歧风险 max(0, C−τ)",1e-05,4e-06

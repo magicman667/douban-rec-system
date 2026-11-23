@@ -1,0 +1,391 @@
+model,display_name,fpr,tpr
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.0,0.0
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.00541,0.0834
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.01107,0.13066
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.01708,0.17025
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.02363,0.20598
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.03039,0.23748
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.03748,0.26653
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.04468,0.29276
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.0521,0.31752
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.05983,0.34141
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.06779,0.36351
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.07585,0.38528
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.08411,0.40586
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.09256,0.42563
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.1014,0.4439
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.11054,0.46148
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.11966,0.47848
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.12926,0.49509
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.13897,0.51095
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.14886,0.52665
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.15912,0.54183
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.16953,0.55648
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.18042,0.57074
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.19128,0.58455
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.20251,0.59828
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.21394,0.61186
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.22557,0.62483
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.23774,0.63771
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.25018,0.65005
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.26256,0.6623
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.27558,0.67432
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.28909,0.68603
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.30288,0.69745
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.31687,0.70864
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.33125,0.71987
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.34614,0.73074
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.36101,0.74146
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.37657,0.75219
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.39232,0.76246
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.40857,0.77263
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.42492,0.78269
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.44175,0.79263
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.45932,0.80224
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.47723,0.81177
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.49572,0.82127
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.51459,0.83051
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.53384,0.83989
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.55385,0.84903
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.57444,0.85808
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.59568,0.86701
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.61725,0.87584
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.63933,0.88459
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.66213,0.89335
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.68577,0.90207
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.71033,0.91072
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.73428,0.91946
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.7593,0.92804
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.78549,0.9364
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.81301,0.94514
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.84337,0.95364
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.87484,0.96209
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.90777,0.97072
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.94274,0.97912
+ALS_Dot,纯 ALS 协同得分 (课堂基础),0.97581,0.98797
+ALS_Dot,纯 ALS 协同得分 (课堂基础),1.0,1.0
+L2-LR,L2 逻辑回归 (全特征线性),0.0,0.0
+L2-LR,L2 逻辑回归 (全特征线性),0.00406,0.07679
+L2-LR,L2 逻辑回归 (全特征线性),0.00876,0.12311
+L2-LR,L2 逻辑回归 (全特征线性),0.01376,0.16307
+L2-LR,L2 逻辑回归 (全特征线性),0.01896,0.19905
+L2-LR,L2 逻辑回归 (全特征线性),0.02466,0.23156
+L2-LR,L2 逻辑回归 (全特征线性),0.03053,0.26152
+L2-LR,L2 逻辑回归 (全特征线性),0.03654,0.28879
+L2-LR,L2 逻辑回归 (全特征线性),0.04278,0.31402
+L2-LR,L2 逻辑回归 (全特征线性),0.04918,0.33783
+L2-LR,L2 逻辑回归 (全特征线性),0.05585,0.36113
+L2-LR,L2 逻辑回归 (全特征线性),0.06257,0.38353
+L2-LR,L2 逻辑回归 (全特征线性),0.06958,0.40508
+L2-LR,L2 逻辑回归 (全特征线性),0.07656,0.42512
+L2-LR,L2 逻辑回归 (全特征线性),0.08375,0.44512
+L2-LR,L2 逻辑回归 (全特征线性),0.09103,0.46397
+L2-LR,L2 逻辑回归 (全特征线性),0.09856,0.48209
+L2-LR,L2 逻辑回归 (全特征线性),0.10612,0.49977
+L2-LR,L2 逻辑回归 (全特征线性),0.11382,0.51701
+L2-LR,L2 逻辑回归 (全特征线性),0.1218,0.53341
+L2-LR,L2 逻辑回归 (全特征线性),0.1297,0.5495
+L2-LR,L2 逻辑回归 (全特征线性),0.13791,0.56499
+L2-LR,L2 逻辑回归 (全特征线性),0.14636,0.58016
+L2-LR,L2 逻辑回归 (全特征线性),0.15485,0.59519
+L2-LR,L2 逻辑回归 (全特征线性),0.16345,0.60975
+L2-LR,L2 逻辑回归 (全特征线性),0.17233,0.62398
+L2-LR,L2 逻辑回归 (全特征线性),0.18124,0.63791
+L2-LR,L2 逻辑回归 (全特征线性),0.19057,0.65159
+L2-LR,L2 逻辑回归 (全特征线性),0.19985,0.66508
+L2-LR,L2 逻辑回归 (全特征线性),0.20958,0.67802
+L2-LR,L2 逻辑回归 (全特征线性),0.21935,0.69069
+L2-LR,L2 逻辑回归 (全特征线性),0.22978,0.70321
+L2-LR,L2 逻辑回归 (全特征线性),0.24018,0.71516
+L2-LR,L2 逻辑回归 (全特征线性),0.25067,0.72715
+L2-LR,L2 逻辑回归 (全特征线性),0.26153,0.7389
+L2-LR,L2 逻辑回归 (全特征线性),0.2722,0.75049
+L2-LR,L2 逻辑回归 (全特征线性),0.28338,0.76176
+L2-LR,L2 逻辑回归 (全特征线性),0.29495,0.7727
+L2-LR,L2 逻辑回归 (全特征线性),0.30697,0.78356
+L2-LR,L2 逻辑回归 (全特征线性),0.31895,0.79405
+L2-LR,L2 逻辑回归 (全特征线性),0.33101,0.80449
+L2-LR,L2 逻辑回归 (全特征线性),0.3438,0.81463
+L2-LR,L2 逻辑回归 (全特征线性),0.35691,0.82462
+L2-LR,L2 逻辑回归 (全特征线性),0.37035,0.83455
+L2-LR,L2 逻辑回归 (全特征线性),0.38447,0.84442
+L2-LR,L2 逻辑回归 (全特征线性),0.39878,0.85399
+L2-LR,L2 逻辑回归 (全特征线性),0.41352,0.86327
+L2-LR,L2 逻辑回归 (全特征线性),0.42898,0.87226
+L2-LR,L2 逻辑回归 (全特征线性),0.44546,0.88107
+L2-LR,L2 逻辑回归 (全特征线性),0.46192,0.88999
+L2-LR,L2 逻辑回归 (全特征线性),0.47889,0.89854
+L2-LR,L2 逻辑回归 (全特征线性),0.49693,0.90683
+L2-LR,L2 逻辑回归 (全特征线性),0.5158,0.91514
+L2-LR,L2 逻辑回归 (全特征线性),0.53606,0.92323
+L2-LR,L2 逻辑回归 (全特征线性),0.55626,0.93117
+L2-LR,L2 逻辑回归 (全特征线性),0.57894,0.939
+L2-LR,L2 逻辑回归 (全特征线性),0.60283,0.94666
+L2-LR,L2 逻辑回归 (全特征线性),0.62836,0.95409
+L2-LR,L2 逻辑回归 (全特征线性),0.65587,0.96122
+L2-LR,L2 逻辑回归 (全特征线性),0.68549,0.96816
+L2-LR,L2 逻辑回归 (全特征线性),0.71943,0.97498
+L2-LR,L2 逻辑回归 (全特征线性),0.75976,0.98154
+L2-LR,L2 逻辑回归 (全特征线性),0.80872,0.988
+L2-LR,L2 逻辑回归 (全特征线性),0.87146,0.99422
+L2-LR,L2 逻辑回归 (全特征线性),1.0,1.0
+FM,FM 分解机 (k=16 二阶交叉),0.0,0.0
+FM,FM 分解机 (k=16 二阶交叉),0.00501,0.09309
+FM,FM 分解机 (k=16 二阶交叉),0.0103,0.14535
+FM,FM 分解机 (k=16 二阶交叉),0.01584,0.18703
+FM,FM 分解机 (k=16 二阶交叉),0.02156,0.22391
+FM,FM 分解机 (k=16 二阶交叉),0.0274,0.2562
+FM,FM 分解机 (k=16 二阶交叉),0.03335,0.28597
+FM,FM 分解机 (k=16 二阶交叉),0.03941,0.3131
+FM,FM 分解机 (k=16 二阶交叉),0.04559,0.33805
+FM,FM 分解机 (k=16 二阶交叉),0.05201,0.36214
+FM,FM 分解机 (k=16 二阶交叉),0.05846,0.38443
+FM,FM 分解机 (k=16 二阶交叉),0.06504,0.40632
+FM,FM 分解机 (k=16 二阶交叉),0.07182,0.42672
+FM,FM 分解机 (k=16 二阶交叉),0.07855,0.44589
+FM,FM 分解机 (k=16 二阶交叉),0.08548,0.46496
+FM,FM 分解机 (k=16 二阶交叉),0.0926,0.48298
+FM,FM 分解机 (k=16 二阶交叉),0.09986,0.50074
+FM,FM 分解机 (k=16 二阶交叉),0.10711,0.51805
+FM,FM 分解机 (k=16 二阶交叉),0.11438,0.53425
+FM,FM 分解机 (k=16 二阶交叉),0.12191,0.55024
+FM,FM 分解机 (k=16 二阶交叉),0.12964,0.5657
+FM,FM 分解机 (k=16 二阶交叉),0.13754,0.58072
+FM,FM 分解机 (k=16 二阶交叉),0.14551,0.59593
+FM,FM 分解机 (k=16 二阶交叉),0.15371,0.61003
+FM,FM 分解机 (k=16 二阶交叉),0.16211,0.62425
+FM,FM 分解机 (k=16 二阶交叉),0.17081,0.63785
+FM,FM 分解机 (k=16 二阶交叉),0.17939,0.65158
+FM,FM 分解机 (k=16 二阶交叉),0.18807,0.66453
+FM,FM 分解机 (k=16 二阶交叉),0.19719,0.67694
+FM,FM 分解机 (k=16 二阶交叉),0.20641,0.68927
+FM,FM 分解机 (k=16 二阶交叉),0.21569,0.70122
+FM,FM 分解机 (k=16 二阶交叉),0.22501,0.71313
+FM,FM 分解机 (k=16 二阶交叉),0.23487,0.72484
+FM,FM 分解机 (k=16 二阶交叉),0.24487,0.73617
+FM,FM 分解机 (k=16 二阶交叉),0.2551,0.7474
+FM,FM 分解机 (k=16 二阶交叉),0.26536,0.75821
+FM,FM 分解机 (k=16 二阶交叉),0.27605,0.76889
+FM,FM 分解机 (k=16 二阶交叉),0.28699,0.77957
+FM,FM 分解机 (k=16 二阶交叉),0.29826,0.78965
+FM,FM 分解机 (k=16 二阶交叉),0.30941,0.79984
+FM,FM 分解机 (k=16 二阶交叉),0.32084,0.80952
+FM,FM 分解机 (k=16 二阶交叉),0.33307,0.81912
+FM,FM 分解机 (k=16 二阶交叉),0.34557,0.82887
+FM,FM 分解机 (k=16 二阶交叉),0.35851,0.83823
+FM,FM 分解机 (k=16 二阶交叉),0.37158,0.84745
+FM,FM 分解机 (k=16 二阶交叉),0.38473,0.85662
+FM,FM 分解机 (k=16 二阶交叉),0.39879,0.86536
+FM,FM 分解机 (k=16 二阶交叉),0.41296,0.87417
+FM,FM 分解机 (k=16 二阶交叉),0.42832,0.88264
+FM,FM 分解机 (k=16 二阶交叉),0.44415,0.89103
+FM,FM 分解机 (k=16 二阶交叉),0.46083,0.89936
+FM,FM 分解机 (k=16 二阶交叉),0.47822,0.90747
+FM,FM 分解机 (k=16 二阶交叉),0.49605,0.91555
+FM,FM 分解机 (k=16 二阶交叉),0.51501,0.92344
+FM,FM 分解机 (k=16 二阶交叉),0.535,0.93123
+FM,FM 分解机 (k=16 二阶交叉),0.55622,0.93884
+FM,FM 分解机 (k=16 二阶交叉),0.57862,0.94616
+FM,FM 分解机 (k=16 二阶交叉),0.60352,0.95337
+FM,FM 分解机 (k=16 二阶交叉),0.62976,0.96044
+FM,FM 分解机 (k=16 二阶交叉),0.65849,0.96751
+FM,FM 分解机 (k=16 二阶交叉),0.69214,0.97443
+FM,FM 分解机 (k=16 二阶交叉),0.73124,0.9811
+FM,FM 分解机 (k=16 二阶交叉),0.77982,0.98763
+FM,FM 分解机 (k=16 二阶交叉),0.84501,0.99398
+FM,FM 分解机 (k=16 二阶交叉),1.0,1.0
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.0,0.0
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.00286,0.0657
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.00731,0.11853
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.01225,0.16075
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.01746,0.19898
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.02302,0.23267
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.02895,0.26371
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.03509,0.29201
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.0414,0.31836
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.04786,0.34367
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.05439,0.36739
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.06092,0.3904
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.06774,0.41341
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.07477,0.43423
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.08208,0.45521
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.08954,0.47571
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.09734,0.49458
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.10549,0.51382
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.11381,0.53179
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.12252,0.54906
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.13108,0.56579
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.13955,0.5818
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.14846,0.59738
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.15742,0.61269
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.16672,0.62762
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.17648,0.64172
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.18631,0.6559
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.19628,0.66943
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.20666,0.6834
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.21697,0.69745
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.22767,0.71103
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.23846,0.72446
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.24961,0.73737
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.26134,0.74993
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.27339,0.76246
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.28584,0.77456
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.29863,0.78622
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.31178,0.79726
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.32488,0.80821
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.33851,0.8195
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.35209,0.83034
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.36624,0.84068
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.38122,0.85094
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.39697,0.86111
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.41331,0.87098
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.43008,0.88025
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.44767,0.88951
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.46557,0.89828
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.48454,0.90668
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.50418,0.91516
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.52373,0.92329
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.54494,0.93136
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.56689,0.93917
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.59048,0.94694
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.6156,0.95419
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.64194,0.9613
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.67059,0.96814
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.70199,0.97452
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.7356,0.98056
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.77448,0.98612
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.81454,0.99085
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.85861,0.99479
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.90307,0.99745
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),0.94825,0.9992
+Spark_YARN_GBT,Spark 分布式 GBT (2 Worker),1.0,1.0
+GBDT,梯度提升树 (Hist-GBDT),0.0,0.0
+GBDT,梯度提升树 (Hist-GBDT),0.00497,0.09758
+GBDT,梯度提升树 (Hist-GBDT),0.01029,0.15163
+GBDT,梯度提升树 (Hist-GBDT),0.01579,0.19405
+GBDT,梯度提升树 (Hist-GBDT),0.02152,0.23101
+GBDT,梯度提升树 (Hist-GBDT),0.02731,0.26357
+GBDT,梯度提升树 (Hist-GBDT),0.03324,0.29344
+GBDT,梯度提升树 (Hist-GBDT),0.03934,0.32014
+GBDT,梯度提升树 (Hist-GBDT),0.04555,0.34392
+GBDT,梯度提升树 (Hist-GBDT),0.05203,0.3677
+GBDT,梯度提升树 (Hist-GBDT),0.05843,0.39009
+GBDT,梯度提升树 (Hist-GBDT),0.06487,0.41178
+GBDT,梯度提升树 (Hist-GBDT),0.07141,0.43236
+GBDT,梯度提升树 (Hist-GBDT),0.07812,0.45166
+GBDT,梯度提升树 (Hist-GBDT),0.08499,0.47037
+GBDT,梯度提升树 (Hist-GBDT),0.09205,0.48884
+GBDT,梯度提升树 (Hist-GBDT),0.09917,0.50606
+GBDT,梯度提升树 (Hist-GBDT),0.10642,0.52281
+GBDT,梯度提升树 (Hist-GBDT),0.11385,0.53843
+GBDT,梯度提升树 (Hist-GBDT),0.12144,0.55463
+GBDT,梯度提升树 (Hist-GBDT),0.12913,0.57002
+GBDT,梯度提升树 (Hist-GBDT),0.13716,0.58503
+GBDT,梯度提升树 (Hist-GBDT),0.14519,0.59965
+GBDT,梯度提升树 (Hist-GBDT),0.15321,0.61426
+GBDT,梯度提升树 (Hist-GBDT),0.16151,0.62824
+GBDT,梯度提升树 (Hist-GBDT),0.17004,0.64171
+GBDT,梯度提升树 (Hist-GBDT),0.17886,0.6548
+GBDT,梯度提升树 (Hist-GBDT),0.18777,0.668
+GBDT,梯度提升树 (Hist-GBDT),0.19686,0.68056
+GBDT,梯度提升树 (Hist-GBDT),0.20604,0.69259
+GBDT,梯度提升树 (Hist-GBDT),0.21531,0.70443
+GBDT,梯度提升树 (Hist-GBDT),0.22491,0.71602
+GBDT,梯度提升树 (Hist-GBDT),0.23453,0.72784
+GBDT,梯度提升树 (Hist-GBDT),0.24453,0.73894
+GBDT,梯度提升树 (Hist-GBDT),0.25512,0.74998
+GBDT,梯度提升树 (Hist-GBDT),0.26543,0.76089
+GBDT,梯度提升树 (Hist-GBDT),0.27615,0.77129
+GBDT,梯度提升树 (Hist-GBDT),0.28703,0.78177
+GBDT,梯度提升树 (Hist-GBDT),0.29791,0.792
+GBDT,梯度提升树 (Hist-GBDT),0.30951,0.80204
+GBDT,梯度提升树 (Hist-GBDT),0.32136,0.81193
+GBDT,梯度提升树 (Hist-GBDT),0.33326,0.82164
+GBDT,梯度提升树 (Hist-GBDT),0.34546,0.83128
+GBDT,梯度提升树 (Hist-GBDT),0.35813,0.84075
+GBDT,梯度提升树 (Hist-GBDT),0.37133,0.84991
+GBDT,梯度提升树 (Hist-GBDT),0.3847,0.8589
+GBDT,梯度提升树 (Hist-GBDT),0.3988,0.86801
+GBDT,梯度提升树 (Hist-GBDT),0.41377,0.87695
+GBDT,梯度提升树 (Hist-GBDT),0.42929,0.8855
+GBDT,梯度提升树 (Hist-GBDT),0.4451,0.89374
+GBDT,梯度提升树 (Hist-GBDT),0.46145,0.90203
+GBDT,梯度提升树 (Hist-GBDT),0.47863,0.91007
+GBDT,梯度提升树 (Hist-GBDT),0.4966,0.91793
+GBDT,梯度提升树 (Hist-GBDT),0.51582,0.92559
+GBDT,梯度提升树 (Hist-GBDT),0.53538,0.9332
+GBDT,梯度提升树 (Hist-GBDT),0.55714,0.94066
+GBDT,梯度提升树 (Hist-GBDT),0.58043,0.94803
+GBDT,梯度提升树 (Hist-GBDT),0.60528,0.9551
+GBDT,梯度提升树 (Hist-GBDT),0.63106,0.96212
+GBDT,梯度提升树 (Hist-GBDT),0.6611,0.96894
+GBDT,梯度提升树 (Hist-GBDT),0.69437,0.9758
+GBDT,梯度提升树 (Hist-GBDT),0.73297,0.98232
+GBDT,梯度提升树 (Hist-GBDT),0.78301,0.9887
+GBDT,梯度提升树 (Hist-GBDT),0.84616,0.99461
+GBDT,梯度提升树 (Hist-GBDT),1.0,1.0
+GBDT+LR,GBDT + LR (Facebook 架构),0.0,0.0
+GBDT+LR,GBDT + LR (Facebook 架构),0.00367,0.07883
+GBDT+LR,GBDT + LR (Facebook 架构),0.00804,0.12853
+GBDT+LR,GBDT + LR (Facebook 架构),0.01295,0.16992
+GBDT+LR,GBDT + LR (Facebook 架构),0.01811,0.20586
+GBDT+LR,GBDT + LR (Facebook 架构),0.02349,0.23838
+GBDT+LR,GBDT + LR (Facebook 架构),0.02914,0.26888
+GBDT+LR,GBDT + LR (Facebook 架构),0.03499,0.29613
+GBDT+LR,GBDT + LR (Facebook 架构),0.04094,0.32197
+GBDT+LR,GBDT + LR (Facebook 架构),0.047,0.34651
+GBDT+LR,GBDT + LR (Facebook 架构),0.05323,0.37067
+GBDT+LR,GBDT + LR (Facebook 架构),0.05972,0.39266
+GBDT+LR,GBDT + LR (Facebook 架构),0.06646,0.41356
+GBDT+LR,GBDT + LR (Facebook 架构),0.07319,0.43376
+GBDT+LR,GBDT + LR (Facebook 架构),0.08017,0.45338
+GBDT+LR,GBDT + LR (Facebook 架构),0.0871,0.47245
+GBDT+LR,GBDT + LR (Facebook 架构),0.09424,0.49082
+GBDT+LR,GBDT + LR (Facebook 架构),0.10144,0.50886
+GBDT+LR,GBDT + LR (Facebook 架构),0.10875,0.52585
+GBDT+LR,GBDT + LR (Facebook 架构),0.11619,0.54181
+GBDT+LR,GBDT + LR (Facebook 架构),0.12393,0.55754
+GBDT+LR,GBDT + LR (Facebook 架构),0.13193,0.57339
+GBDT+LR,GBDT + LR (Facebook 架构),0.14007,0.58842
+GBDT+LR,GBDT + LR (Facebook 架构),0.14839,0.60323
+GBDT+LR,GBDT + LR (Facebook 架构),0.1567,0.61736
+GBDT+LR,GBDT + LR (Facebook 架构),0.16526,0.63141
+GBDT+LR,GBDT + LR (Facebook 架构),0.17417,0.64516
+GBDT+LR,GBDT + LR (Facebook 架构),0.18327,0.65833
+GBDT+LR,GBDT + LR (Facebook 架构),0.19227,0.67175
+GBDT+LR,GBDT + LR (Facebook 架构),0.20173,0.68467
+GBDT+LR,GBDT + LR (Facebook 架构),0.21124,0.69718
+GBDT+LR,GBDT + LR (Facebook 架构),0.22118,0.70951
+GBDT+LR,GBDT + LR (Facebook 架构),0.23134,0.72146
+GBDT+LR,GBDT + LR (Facebook 架构),0.24154,0.73331
+GBDT+LR,GBDT + LR (Facebook 架构),0.25202,0.7448
+GBDT+LR,GBDT + LR (Facebook 架构),0.26271,0.75601
+GBDT+LR,GBDT + LR (Facebook 架构),0.27367,0.76689
+GBDT+LR,GBDT + LR (Facebook 架构),0.28487,0.77777
+GBDT+LR,GBDT + LR (Facebook 架构),0.2961,0.78864
+GBDT+LR,GBDT + LR (Facebook 架构),0.30789,0.79888
+GBDT+LR,GBDT + LR (Facebook 架构),0.32008,0.80918
+GBDT+LR,GBDT + LR (Facebook 架构),0.33264,0.81919
+GBDT+LR,GBDT + LR (Facebook 架构),0.34546,0.82911
+GBDT+LR,GBDT + LR (Facebook 架构),0.35845,0.83888
+GBDT+LR,GBDT + LR (Facebook 架构),0.37209,0.84844
+GBDT+LR,GBDT + LR (Facebook 架构),0.3864,0.8578
+GBDT+LR,GBDT + LR (Facebook 架构),0.40107,0.86706
+GBDT+LR,GBDT + LR (Facebook 架构),0.41605,0.87585
+GBDT+LR,GBDT + LR (Facebook 架构),0.4318,0.88459
+GBDT+LR,GBDT + LR (Facebook 架构),0.4482,0.89328
+GBDT+LR,GBDT + LR (Facebook 架构),0.46533,0.90162
+GBDT+LR,GBDT + LR (Facebook 架构),0.48239,0.90984
+GBDT+LR,GBDT + LR (Facebook 架构),0.50124,0.91758
+GBDT+LR,GBDT + LR (Facebook 架构),0.52009,0.92561
+GBDT+LR,GBDT + LR (Facebook 架构),0.54011,0.93333
+GBDT+LR,GBDT + LR (Facebook 架构),0.56193,0.94097
+GBDT+LR,GBDT + LR (Facebook 架构),0.58492,0.94832
+GBDT+LR,GBDT + LR (Facebook 架构),0.60947,0.95545
+GBDT+LR,GBDT + LR (Facebook 架构),0.63632,0.96248
+GBDT+LR,GBDT + LR (Facebook 架构),0.66613,0.96937
+GBDT+LR,GBDT + LR (Facebook 架构),0.6999,0.97599
+GBDT+LR,GBDT + LR (Facebook 架构),0.73874,0.98248
+GBDT+LR,GBDT + LR (Facebook 架构),0.78777,0.98874
+GBDT+LR,GBDT + LR (Facebook 架构),0.8517,0.99467
+GBDT+LR,GBDT + LR (Facebook 架构),1.0,1.0

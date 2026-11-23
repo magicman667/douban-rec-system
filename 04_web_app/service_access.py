@@ -40,6 +40,56 @@ def backend():
 
 
 @st.cache_resource(show_spinner=False)
+def ml_ranker():
+    bundle_path = Path(os.getenv('DOUBAN_ML_BUNDLE', '/srv/douban-data/outputs/full-v1/ml_ranker/ml_ranker_bundle.joblib'))
+    stats_path = Path(os.getenv('DOUBAN_ML_USER_STATS', '/srv/douban-data/outputs/full-v1/ml_ranker/full_user_rating_stats.parquet'))
+    if not bundle_path.exists() or not stats_path.exists():
+        return None
+    if str(SOURCE) not in sys.path:
+        sys.path.insert(0, str(SOURCE))
+    try:
+        mod = importlib.reload(importlib.import_module('ml_ranker'))
+        return mod.MLRankerEngine.load(
+            bundle_path=bundle_path,
+            user_stats_path=stats_path,
+            als_factors_path=data.ARTIFACTS / 'als_factors.parquet',
+            meta_extra_csv=data.MOVIE_META_CSV,
+        )
+    except Exception:
+        logging.exception('Failed to load MLRankerEngine')
+        return None
+
+
+def predict_match(uid, movie, ranker='GBDT+LR'):
+    engine = ml_ranker()
+    if engine is None or not ranker or ranker == '规则重排':
+        return None
+    try:
+        p_df = data.profile(int(uid))
+        if len(p_df):
+            r = p_df.iloc[0].to_dict()
+            prefs = data._to_list(r.get('genre_pref_json'))
+            try:
+                import json
+                pref_map = json.loads(str(r.get('genre_pref_json') or '{}'))
+            except Exception:
+                pref_map = {}
+            prof = {
+                'user_id': int(uid),
+                'rating_count': int(r.get('rating_count') or 1),
+                'tolerance_tau': float(r.get('tolerance_tau') or 0.39),
+                'user_type_label': str(r.get('user_type_label') or '均衡观影派'),
+                'genre_preferences': pref_map if isinstance(pref_map, dict) else {},
+            }
+        else:
+            prof = {'user_id': int(uid), 'rating_count': 20, 'tolerance_tau': 0.28, 'user_type_label': '稳妥防雷派', 'genre_preferences': {}}
+        return engine.score_single_movie(int(uid), prof, movie, model_name=ranker)
+    except Exception:
+        logging.exception('predict_match failed')
+        return None
+
+
+@st.cache_resource(show_spinner=False)
 def _mongo_collection():
     uri = os.getenv('DOUBAN_MONGO_URI', os.getenv('MONGO_URI', 'mongodb://127.0.0.1:27017'))
     client = MongoClient(uri, serverSelectionTimeoutMS=2000)
@@ -84,13 +134,21 @@ def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False, popularity_we
     enriched = _attach_meta(movies)
     if popularity_weight > 0:
         def _rank_key(m):
-            base = float(m.get('utility_score', m.get('semantic_score', 0.0)) or 0.0)
+            has_ml = m.get('ml_rank_score') is not None
+            base = float(m.get('ml_rank_score') if has_ml else m.get('utility_score', m.get('semantic_score', 0.0)) or 0.0)
             votes = int(m.get('douban_votes') or 0)
-            pop_boost = popularity_weight * math.log10(max(1, votes) + 1)
-            poster_boost = 0.22 if _has_poster(m) else 0.0
+            scale = 0.22 if has_ml else 1.0
+            pop_boost = float(popularity_weight) * scale * math.log10(max(1, votes) + 1)
+            poster_boost = (0.06 if has_ml else 0.22) if _has_poster(m) else 0.0
             return base + pop_boost + poster_boost
 
         ordered = sorted(enriched, key=_rank_key, reverse=True)
+    elif enriched and enriched[0].get('ml_rank_score') is not None:
+        ordered = sorted(
+            enriched,
+            key=lambda m: (float(m.get('ml_rank_score') or 0.0) + (0.04 if _has_poster(m) else 0.0)),
+            reverse=True,
+        )
     else:
         with_cover = [m for m in enriched if _has_poster(m)]
         without_cover = [m for m in enriched if not _has_poster(m)]
@@ -118,7 +176,7 @@ def _prioritize_posters(movies, top_k=10, enforce_genre_cap=False, popularity_we
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14, region_scope='全部地区'):
+def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14, region_scope='全部地区', ranker='GBDT+LR'):
     top_pool = 60 if region_scope != '全部地区' else 36
     try:
         result = call('get_user_recommendations', user_id=int(uid), genre_filter=genre, top_k=top_pool, min_ratings=int(min_ratings))
@@ -162,6 +220,11 @@ def recommend(uid, genre=None, min_ratings=50, popularity_weight=0.14, region_sc
                 if int(m['movie_id']) not in seen:
                     raw.append(m)
                     seen.add(int(m['movie_id']))
+
+    if ranker in ('GBDT+LR', 'GBDT', 'FM'):
+        engine = ml_ranker()
+        if engine is not None:
+            raw = engine.score_candidates(int(uid), result.get('user') or {}, raw, model_name=ranker, popularity_weight=0.0)
 
     movies = _prioritize_posters(
         raw,

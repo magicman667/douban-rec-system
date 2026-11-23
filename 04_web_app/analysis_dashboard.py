@@ -197,7 +197,45 @@ def overview():
             titles = data.movies_lookup(sub_trace['movie_id'].tolist())
             show(charts.rerank_flow(sub_trace, titles))
 
-    # ── Row 4: Big Data Architecture Performance Telemetry ──
+    # ── Row 4: Non-DL ML Ranking Evaluation (GBDT / GBDT+LR / FM / Spark YARN GBT) ──
+    if data.csv_path('ml_ranker_metrics').exists():
+        ml_met = load('ml_ranker_metrics')
+        ml_imp = load('ml_feature_importance')
+        ml_roc = load('ml_roc_curves')
+
+        st.markdown('<hr class="soft-hr">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="sec-bar"><div>'
+            '<span class="sec-title">🤖 非深度学习机器学习精排实测</span> '
+            '<span class="sec-sub">· 时序两阶段防穿越训练 · 89.8 万未见评分封存测试</span>'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        m_idx = ml_met.set_index('model')
+        als_auc = float(m_idx.loc['ALS_Dot', 'roc_auc']) if 'ALS_Dot' in m_idx.index else 0.76
+        best_row = ml_met.sort_values('roc_auc', ascending=False).iloc[0]
+        best_gauc_row = ml_met.sort_values('gauc', ascending=False).iloc[0]
+        sp_id = str(m_idx.loc['Spark_YARN_GBT', 'yarn_app_id']) if 'Spark_YARN_GBT' in m_idx.index else 'YARN'
+        sp_auc = f'{float(m_idx.loc["Spark_YARN_GBT", "roc_auc"]):.4f}' if 'Spark_YARN_GBT' in m_idx.index else '-'
+
+        mk1, mk2, mk3, mk4 = st.columns(4, gap='small')
+        mk1.metric('最优测试 ROC-AUC', f'{float(best_row["roc_auc"]):.4f}', f'{best_row["model"]} (较纯ALS +{(float(best_row["roc_auc"]) - als_auc) * 100:.2f}pp)')
+        mk2.metric('最优用户内 GAUC', f'{float(best_gauc_row["gauc"]):.4f}', f'{best_gauc_row["model"]} (同用户精排精度)')
+        mk3.metric('Spark YARN GBT', sp_auc, f'2 Worker 分布式 · {sp_id[-13:]}')
+        mk4.metric('精排特征维数', '21 稠密 + 18 稀疏', '协同 · 贝叶斯 · 分歧 × 容忍度')
+
+        m_left, m_right = st.columns(2, gap='medium')
+        with m_left:
+            with st.container(border=True):
+                show(charts.ml_ranker_comparison(ml_met))
+        with m_right:
+            with st.container(border=True):
+                show(charts.ml_roc_curves(ml_roc, ml_met))
+
+        with st.container(border=True):
+            show(charts.ml_feature_importance(ml_imp))
+
+    # ── Row 5: Big Data Architecture Performance Telemetry ──
     wc_df = load('wordcount_runtime')
     par_df = load('spark_parallel_runtime')
     bench = data.service_benchmark()

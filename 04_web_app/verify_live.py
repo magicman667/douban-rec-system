@@ -50,6 +50,15 @@ def _check_charts():
         *charts.arch_benchmark(wc, par, bench),
         charts.star_mini([14, 12, 24, 27, 19]),
     ]
+    if data.csv_path('ml_ranker_metrics').exists():
+        ml_met = data.read_csv('ml_ranker_metrics')
+        ml_imp = data.read_csv('ml_feature_importance')
+        ml_roc = data.read_csv('ml_roc_curves')
+        figs.extend([
+            charts.ml_ranker_comparison(ml_met),
+            charts.ml_roc_curves(ml_roc, ml_met),
+            charts.ml_feature_importance(ml_imp),
+        ])
     assert all(len(f.data) >= 1 for f in figs)
     return len(figs)
 
@@ -106,7 +115,10 @@ def run():
         assert movies and len(movies) <= 10
         assert len({m['movie_id'] for m in movies}) == len(movies)
         assert max(Counter(m['main_genre'] for m in movies).values()) <= 4
+        assert all(m.get('ml_prob') is None or 0.0 < float(m['ml_prob']) < 1.0 for m in movies)
         report['personas'].append({'id': persona['user_id'], 'type': persona['user_type_label'], 'count': len(movies)})
+    fm_check = service.recommend(report['personas'][0]['id'], ranker='FM')
+    assert fm_check['recommendations'] and all(0.0 < float(m['ml_prob']) < 1.0 for m in fm_check['recommendations'] if m.get('ml_prob') is not None)
     result = service.recommend(report['personas'][0]['id'], '科幻')
     assert all(m['main_genre'] == '科幻' or '科幻' in m['genres'] for m in result['recommendations'])
     for query in ['雨天独自看的温暖科幻片', '和朋友一起看的轻松喜剧', '节奏紧凑的悬疑电影']:

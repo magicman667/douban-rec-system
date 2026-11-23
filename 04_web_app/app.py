@@ -20,7 +20,7 @@ import service_access as service
 
 def _sync_submodules():
     changed = False
-    for mod in (data, charts, dash):
+    for mod in (data, charts, service, dash):
         path = getattr(mod, '__file__', None)
         if not path:
             continue
@@ -29,6 +29,8 @@ def _sync_submodules():
             importlib.reload(mod)
             mod._hot_mtime = mtime
             changed = True
+            if mod is service:
+                service.ml_ranker.clear()
     if changed:
         st.cache_data.clear()
 
@@ -298,9 +300,27 @@ h2, h3 { font-weight: 600 !important; color: #f1f5f9 !important; letter-spacing:
   margin-bottom: 3px;
 }
 .film-cast {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
   font-size: 10.5px; color: #64748b;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 6px; min-height: 14px;
+  white-space: nowrap; overflow: hidden;
+  margin-bottom: 6px; min-height: 16px;
+}
+.ml-fit {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 6px;
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.34);
+}
+.ml-diag {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 10px;
+  padding: 8px 13px;
+  margin: 6px 0 8px;
+  font-size: 12.5px;
+  color: #e0f2fe;
 }
 .meter-row { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #94a3b8; }
 .meter-track { flex: 1; height: 4px; border-radius: 99px; background: rgba(148,163,184,0.16); overflow: hidden; }
@@ -553,6 +573,8 @@ def _cards(movies, context):
         badge_text, badge_cls = _archetype_badge(merged)
         div_idx, div_lbl, div_col, div_short = data.divergence_tier(c_val)
         c_pct = min(100, max(6, div_idx))
+        ml_prob = merged.get('ml_prob')
+        fit_html = f'<span class="ml-fit" title="{html.escape(str(merged.get("ml_model") or "GBDT+LR"))} 实时预测合拍度">合拍 {int(round(float(ml_prob) * 100))}%</span>' if ml_prob is not None else ''
 
         with cols[idx % cols_per_row]:
             st.markdown(
@@ -565,7 +587,7 @@ def _cards(movies, context):
                 f'<div class="film-body">'
                 f'<div class="film-title" title="{title}">{title}</div>'
                 f'<div class="film-meta">{meta_line}</div>'
-                f'<div class="film-cast">{cast_line}</div>'
+                f'<div class="film-cast"><span style="overflow:hidden;text-overflow:ellipsis">{cast_line}</span>{fit_html}</div>'
                 f'<div class="meter-row">'
                 f'<span title="口碑分歧指数 {div_idx}/100（{div_lbl}，原始 C={c_val:.3f}）">分歧 {div_idx}</span>'
                 f'<div class="meter-track"><div class="meter-fill" style="width:{c_pct}%;background:{div_col}"></div></div>'
@@ -677,6 +699,17 @@ def detail():
             st.plotly_chart(charts.star_mini(hist), width='stretch', config={'displayModeBar': False})
             st.caption(f'星级分布基于 80% 训练集抽样评分（共 {sum(hist):,} 条；公开数据集每片抽样上限约 320 条）')
 
+    active_uid = int(st.session_state.get('active_uid', 413900))
+    active_ranker = str(st.session_state.get('active_ranker', 'GBDT+LR'))
+    ml_info = service.predict_match(active_uid, movie, ranker=active_ranker)
+    if ml_info and ml_info.get('ml_prob') is not None:
+        ml_pct = int(round(float(ml_info['ml_prob']) * 100))
+        reasons = ' · '.join(str(x) for x in (ml_info.get('ml_reasons') or [])[:3]) or '21 维特征推理'
+        st.markdown(
+            f'<div class="ml-diag">🤖 <b>{html.escape(active_ranker)} 实时精排预测</b> · 当前画像（#{active_uid}）合拍度 <b>{ml_pct}%</b> · 贡献因子：{html.escape(reasons)}</div>',
+            unsafe_allow_html=True,
+        )
+
     summary = str(result.get('ai_summary') or '暂无正反方短评摘要。')
     summary_html = html.escape(summary).replace('\n', '<br>')
     st.markdown(f'<div class="ai-card"><b>🤖 AI 口碑排雷卡</b><br>{summary_html}</div>', unsafe_allow_html=True)
@@ -748,11 +781,11 @@ def _render_alert_bar():
 def hall():
     st.markdown(
         '<div class="page-head">'
-        '<div><span class="eyebrow">CINEPULSE · TDC-REC DUAL-VECTOR ENGINE</span><h1>发现电影</h1></div>'
+        '<div><span class="eyebrow">CINEPULSE · TDC-REC MULTI-STAGE ML ENGINE</span><h1>发现电影</h1></div>'
         '<div class="tech-row">'
         '<span class="tech-pill">Weaviate 512D+50D</span>'
-        '<span class="tech-pill">RRF + 非对称风险重排</span>'
-        '<span class="tech-pill">Filtered HNSW · P95 44.7ms</span>'
+        '<span class="tech-pill">GBDT+LR / FM 精排</span>'
+        '<span class="tech-pill">Spark YARN 分布式 GBT</span>'
         '</div></div>',
         unsafe_allow_html=True,
     )
@@ -792,14 +825,30 @@ def hall():
 
         st.markdown('<hr class="soft-hr">', unsafe_allow_html=True)
 
-        # ── Personalized TDC-Rec Dual-Vector Feed ──
-        st.markdown(
-            '<div class="sec-bar"><div>'
-            '<span class="sec-title">✨ 个性化双向量推荐</span> '
-            '<span class="sec-sub">· ALS 50D + BGE 512D 融合重排</span>'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
+        # ── Personalized TDC-Rec Multi-Stage ML Feed ──
+        rk_col1, rk_col2 = st.columns([2.55, 1.45], gap='small')
+        with rk_col1:
+            st.markdown(
+                '<div class="sec-bar"><div>'
+                '<span class="sec-title">✨ 个性化多阶段推荐</span> '
+                '<span class="sec-sub">· ALS+BGE 双向量召回 + 机器学习实时精排</span>'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
+        ranker_options = {
+            'GBDT+LR (Facebook 架构)': ('GBDT+LR', 'Trees+LR 精排'),
+            'Hist-GBDT 梯度提升树': ('GBDT', '240 棵提升树'),
+            'FM 分解机 (二阶交叉)': ('FM', 'k=16 特征交叉'),
+            '规则重排 (对照组)': ('规则重排', 'RRF 手工公式'),
+        }
+        with rk_col2:
+            ranker_choice = st.selectbox(
+                '精排引擎',
+                list(ranker_options.keys()),
+                label_visibility='collapsed',
+                key='rec_ranker_select',
+            )
+        ranker_key, ranker_desc = ranker_options[ranker_choice]
 
         personas = service.personas()
         label_map = {
@@ -841,13 +890,14 @@ def hall():
             uid = int(custom_uid)
 
         try:
-            with st.spinner('TDC-Rec 双通道召回与重排…'):
+            with st.spinner('双通道召回与机器学习精排推理…'):
                 result = service.recommend(
                     uid,
                     None if genre == '全部题材' else genre,
                     min_ratings=min_r,
                     popularity_weight=pop_w,
                     region_scope=rec_region,
+                    ranker=ranker_key,
                 )
         except KeyError:
             st.info(f'未找到档案 #{uid}，请切换顶部预设口味。')
@@ -862,12 +912,14 @@ def hall():
             user_label = user_info.get('user_type_label', '均衡观影派')
             st.session_state['active_tau'] = tau
             st.session_state['active_user_label'] = user_label
+            st.session_state['active_uid'] = int(user_info['user_id'])
+            st.session_state['active_ranker'] = ranker_key
             tau_idx = data.divergence_index(tau)
             k1, k2, k3, k4 = st.columns(4, gap='small')
             k1.metric('当前画像', user_label, f'档案 #{user_info["user_id"]}')
             k2.metric('分歧耐受上限', f'{tau_idx} / 100', f'原始 τ={tau:.2f} · ' + ('拦截 ≥35 分' if tau < 0.28 else ('专探 ≥70 分两极片' if tau > 0.50 else '拦截 ≥70 分高危片')))
             k3.metric('偏好题材', top_pref, f'历史 {int(user_info.get("rating_count", 0)):,} 部')
-            k4.metric('检索范围', f'{rec_region} · {pop_mode.split()[-1]}', mode_desc)
+            k4.metric('当前精排引擎', f'{ranker_key} · {pop_mode}', f'{ranker_desc} · {rec_region}')
 
             movies = result.get('recommendations') or []
             if not movies:
@@ -1021,6 +1073,7 @@ with st.sidebar:
         '<div class="engine-item"><span>Hadoop · YARN</span><b>3 节点集群</b></div>'
         '<div class="engine-item"><span>Hive · Spark</span><b>416.9 万评分</b></div>'
         '<div class="engine-item"><span>Weaviate</span><b>140,502 双向量</b></div>'
+        '<div class="engine-item"><span>ML 精排引擎</span><b>GBDT+LR · FM · YARN</b></div>'
         '<div class="engine-item"><span>分歧标尺</span><b>0-35一致 · ≥70高危</b></div>'
         f'<div class="engine-item"><span>Streaming</span><b>{live_alerts} 条实时预警</b></div>'
         '</div>',

@@ -502,6 +502,121 @@ def star_mini(hist):
     return style(fig, '1～5 星口碑波形', height=240, margin=dict(l=12, r=12, t=36, b=18))
 
 
+ML_SHORT_NAMES = {
+    'ALS_Dot': '纯 ALS',
+    'L2-LR': 'L2-LR',
+    'FM': 'FM 分解机',
+    'Spark_YARN_GBT': 'Spark GBT',
+    'GBDT': 'Hist-GBDT',
+    'GBDT+LR': 'GBDT+LR',
+}
+ML_PALETTE = {
+    'ALS_Dot': '#64748B',
+    'L2-LR': '#94A3B8',
+    'FM': '#A78BFA',
+    'Spark_YARN_GBT': '#10B981',
+    'GBDT': '#38BDF8',
+    'GBDT+LR': '#F59E0B',
+}
+
+
+def ml_ranker_comparison(metrics_df):
+    df = metrics_df.copy()
+    df['简称'] = df['model'].map(lambda k: ML_SHORT_NAMES.get(k, str(k)))
+    rows = []
+    for _, r in df.iterrows():
+        rows.append({'模型': r['简称'], '指标': '全局 ROC-AUC', '得分': float(r['roc_auc'])})
+        rows.append({'模型': r['简称'], '指标': '分组 GAUC (用户内)', '得分': float(r['gauc'])})
+    plot_df = pd.DataFrame(rows)
+    y_min = max(0.50, float(plot_df['得分'].min()) - 0.06)
+    y_max = min(1.0, float(plot_df['得分'].max()) + 0.04)
+    fig = px.bar(
+        plot_df,
+        x='模型',
+        y='得分',
+        color='指标',
+        barmode='group',
+        text=plot_df['得分'].map(lambda v: f'{v:.4f}'),
+        color_discrete_map={'全局 ROC-AUC': '#38BDF8', '分组 GAUC (用户内)': '#F59E0B'},
+        labels={'模型': '', '得分': '测试集排序 AUC'},
+    )
+    fig.update_traces(
+        textposition='outside',
+        cliponaxis=False,
+        textfont=dict(size=9.5, color='#F8FAFC'),
+        hovertemplate='<b>%{x}</b><br>%{fullData.name}：%{y:.5f}<extra></extra>',
+    )
+    fig.update_xaxes(tickangle=0)
+    fig.update_yaxes(range=[y_min, y_max])
+    style(fig, '非深度学习精排模型对比（vs 纯 ALS）', height=380, margin=dict(l=22, r=18, t=46, b=76))
+    fig.update_layout(legend=dict(orientation='h', y=-0.18, yanchor='top', x=0.5, xanchor='center'))
+    return fig
+
+
+def ml_roc_curves(roc_df, metrics_df):
+    auc_map = dict(zip(metrics_df['model'], metrics_df['roc_auc']))
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=[0.0, 1.0],
+            y=[0.0, 1.0],
+            mode='lines',
+            line=dict(color='rgba(148,163,184,0.35)', width=1.2, dash='dot'),
+            name='随机基线 (0.500)',
+            hoverinfo='skip',
+        )
+    )
+    for model_key, grp in roc_df.groupby('model', sort=False):
+        auc = float(auc_map.get(model_key, 0.0))
+        short = ML_SHORT_NAMES.get(model_key, model_key)
+        color = ML_PALETTE.get(model_key, '#CBD5E1')
+        is_baseline = model_key == 'ALS_Dot'
+        is_hero = model_key in ('GBDT', 'GBDT+LR')
+        fig.add_trace(
+            go.Scatter(
+                x=grp['fpr'],
+                y=grp['tpr'],
+                mode='lines',
+                name=f'{short} ({auc:.4f})',
+                line=dict(
+                    color=color,
+                    width=2.8 if is_hero else 1.9,
+                    dash='dash' if is_baseline else 'solid',
+                ),
+                hovertemplate=f'<b>{short}</b> (AUC={auc:.4f})<br>FPR=%{{x:.3f}} · TPR=%{{y:.3f}}<extra></extra>',
+            )
+        )
+    fig.update_xaxes(title_text='假阳性率 (FPR)', range=[0.0, 1.0])
+    fig.update_yaxes(title_text='真阳性率 (TPR)', range=[0.0, 1.02])
+    style(fig, '测试集 ROC 曲线对比（89.8 万未见评分）', height=380, margin=dict(l=24, r=18, t=46, b=98))
+    fig.update_layout(legend=dict(orientation='h', y=-0.27, yanchor='top', x=0.5, xanchor='center', font=dict(size=10)))
+    return fig
+
+
+def ml_feature_importance(imp_df):
+    df = imp_df.sort_values('importance', ascending=False).head(10).iloc[::-1].copy()
+    max_imp = max(0.01, float(df['importance'].max()))
+    fig = px.bar(
+        df,
+        x='importance',
+        y='label_zh',
+        orientation='h',
+        color='importance',
+        text=df['importance'].map(lambda v: f'+{v:.4f}'),
+        color_continuous_scale=['#1E293B', '#38BDF8', '#10B981', '#F59E0B'],
+        labels={'label_zh': '', 'importance': '置换 AUC 重要度 (ΔAUC)'},
+    )
+    fig.update_traces(
+        textposition='outside',
+        cliponaxis=False,
+        textfont=dict(size=10.5, color='#F8FAFC'),
+        hovertemplate='<b>%{y}</b><br>AUC 贡献：+%{x:.5f}<extra></extra>',
+    )
+    fig.update_coloraxes(showscale=False)
+    fig.update_xaxes(range=[0.0, max_imp * 1.24])
+    return style(fig, 'GBDT 核心特征重要性 TOP 10（置换 AUC 消融）', height=345, margin=dict(l=20, r=48, t=46, b=36))
+
+
 # Keep backwards-compatible aliases for any external imports
 def runtime(frame):
     data = frame.copy()

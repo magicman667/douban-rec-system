@@ -36,6 +36,9 @@ SCHEMAS = {
     'als_model_metrics': ('model', 'ndcg_10', 'recall_10', 'coverage_10'),
     'als_landmine_metrics': ('model', 'landmine_10', 'conservative_user_count'),
     'als_genre_error_metrics': ('model', 'genre_err_10'),
+    'ml_ranker_metrics': ('model', 'display_name', 'engine', 'roc_auc', 'gauc', 'pr_auc', 'logloss', 'accuracy', 'train_sec', 'yarn_app_id'),
+    'ml_feature_importance': ('feature', 'label_zh', 'importance', 'std'),
+    'ml_roc_curves': ('model', 'display_name', 'fpr', 'tpr'),
 }
 
 _GROUP_MAP = {
